@@ -987,7 +987,7 @@ const dashboardHTML = `<!DOCTYPE html>
   .progress-ring .fg { stroke: #e94560; stroke-linecap: round;
                        transform: rotate(-90deg); transform-origin: center;
                        transition: stroke-dashoffset 0.5s ease; }
-  .project-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .project-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
   .tab { padding: 6px 16px; border-radius: 4px; cursor: pointer; background: #16213e;
          color: #8899aa; font-size: 0.85rem; border: 1px solid #2a2a4e; }
   .tab.active { background: #e94560; color: white; border-color: #e94560; }
@@ -1069,6 +1069,7 @@ const dashboardHTML = `<!DOCTYPE html>
     </div>
     <button class="btn" id="stepBtn" onclick="doStep()">Run Now</button>
     <button class="btn" id="pauseBtn" onclick="togglePause()" style="background:#ff9800">Resume</button>
+    <div class="project-tabs" id="projectTabs"></div>
   </div>
 
   <div class="grid">
@@ -1095,8 +1096,6 @@ const dashboardHTML = `<!DOCTYPE html>
     <div class="card"><div class="number cost" id="dk-cost">-</div><div class="label">Total Cost</div></div>
     <div class="card"><div class="number">&nbsp;</div><div class="label">&nbsp;</div></div>
   </div>
-
-  <div class="project-tabs" id="projectTabs"></div>
 
   <table>
     <thead>
@@ -1148,7 +1147,7 @@ const dashboardHTML = `<!DOCTYPE html>
 </div>
 
 <script>
-let cycleInterval = 15, secondsLeft = 15, activeProject = '', isRunning = false, isPaused = true;
+let cycleInterval = 15, secondsLeft = 15, activeProject = localStorage.getItem('activeProject') || '', isRunning = false, isPaused = true;
 let verbose = false;
 var lastEssays = [];
 const circ = 2 * Math.PI * 22;
@@ -1387,7 +1386,7 @@ async function doRevert(project, slug, sel) {
   if (data.ok) { refresh(); }
   else { alert('Revert failed'); }
 }
-function filterProject(p) { activeProject = p; refresh(); }
+function filterProject(p) { activeProject = p; localStorage.setItem('activeProject', p); refresh(); }
 async function openFolder(project, slug) {
   await fetch('/api/open?project=' + project + '&slug=' + slug);
 }

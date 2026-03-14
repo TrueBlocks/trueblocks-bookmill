@@ -98,7 +98,8 @@ func isRetryableError(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "credit balance") ||
 		strings.Contains(msg, "rate_limit") ||
-		strings.Contains(msg, "overloaded")
+		strings.Contains(msg, "overloaded") ||
+		strings.Contains(msg, "deadline exceeded")
 }
 
 func (c *AnthropicClient) callOnce(ctx context.Context, model, prompt string, timeout time.Duration) (*APIResult, error) {

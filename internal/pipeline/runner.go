@@ -22,31 +22,36 @@ type docxJob struct {
 	essay *EssayState
 }
 
-type Runner struct {
-	Config            *Config
-	Projects          []*PipelineState
-	Client            *AnthropicClient
-	Log               *log.Logger
-	BaseDir           string
-	ConfigPath        string
-	CLIDryRun         bool
+type seriesSpecs struct {
 	VoiceProfile      string
 	VoiceAntiPatterns string
 	DraftRules        string
 	RevisionRules     string
 	PromptTemplates   map[string]*template.Template
 	Examples          map[string]string
-	docxCh            chan docxJob
-	docxWg            sync.WaitGroup
+}
+
+type Runner struct {
+	Config      *Config
+	Projects    []*PipelineState
+	Client      *AnthropicClient
+	Log         *log.Logger
+	BaseDir     string
+	ConfigPath  string
+	CLIDryRun   bool
+	SeriesSpecs map[string]*seriesSpecs
+	docxCh      chan docxJob
+	docxWg      sync.WaitGroup
 }
 
 func NewRunner(cfg *Config, baseDir string) *Runner {
 	r := &Runner{
-		Config:  cfg,
-		Client:  &AnthropicClient{APIKey: cfg.API.AnthropicKey},
-		Log:     log.New(os.Stdout, "", 0),
-		BaseDir: baseDir,
-		docxCh:  make(chan docxJob, 200),
+		Config:      cfg,
+		Client:      &AnthropicClient{APIKey: cfg.API.AnthropicKey},
+		Log:         log.New(os.Stdout, "", 0),
+		BaseDir:     baseDir,
+		SeriesSpecs: make(map[string]*seriesSpecs),
+		docxCh:      make(chan docxJob, 200),
 	}
 	r.docxWg.Add(1)
 	go r.docxWorker()
@@ -183,13 +188,38 @@ func (r *Runner) ReloadConfig() {
 }
 
 func (r *Runner) loadSpecs() {
-	voicePath := filepath.Join(r.BaseDir, "specs", "voice-summary.md")
-	data, err := os.ReadFile(voicePath)
+	seriesNames := make(map[string]bool)
+	for _, ps := range r.Projects {
+		seriesNames[ps.Project] = true
+	}
+
+	for series := range seriesNames {
+		specs := r.loadSeriesSpecs(series)
+		r.SeriesSpecs[series] = specs
+	}
+}
+
+func (r *Runner) resolveSpecFile(series, filename string) ([]byte, error) {
+	seriesPath := filepath.Join(r.BaseDir, "specs", "prompts", "series", series, filename)
+	if data, err := os.ReadFile(seriesPath); err == nil {
+		return data, nil
+	}
+	genericPath := filepath.Join(r.BaseDir, "specs", "prompts", "generic", filename)
+	return os.ReadFile(genericPath)
+}
+
+func (r *Runner) loadSeriesSpecs(series string) *seriesSpecs {
+	specs := &seriesSpecs{
+		PromptTemplates: make(map[string]*template.Template),
+		Examples:        make(map[string]string),
+	}
+
+	data, err := r.resolveSpecFile(series, "voice-summary.md")
 	if err != nil {
-		r.Log.Printf("Voice summary load failed: %v (keeping previous)", err)
+		r.Log.Printf("[%s] Voice summary load failed: %v", series, err)
 	} else {
 		full := string(data)
-		r.VoiceProfile = full
+		specs.VoiceProfile = full
 
 		const antiHeader = "## What This Voice Does NOT Do"
 		idx := strings.Index(full, antiHeader)
@@ -198,51 +228,58 @@ func (r *Runner) loadSpecs() {
 			if end := strings.Index(section[len(antiHeader):], "\n---"); end >= 0 {
 				section = section[:len(antiHeader)+end]
 			}
-			r.VoiceAntiPatterns = strings.TrimSpace(section)
+			specs.VoiceAntiPatterns = strings.TrimSpace(section)
 		}
 	}
 
-	rulesPath := filepath.Join(r.BaseDir, "specs", "essay-rules.md")
-	data, err = os.ReadFile(rulesPath)
+	data, err = r.resolveSpecFile(series, "essay-rules.md")
 	if err != nil {
-		r.Log.Printf("Essay rules load failed: %v (keeping previous)", err)
+		r.Log.Printf("[%s] Essay rules load failed: %v", series, err)
 	} else {
 		full := string(data)
-		r.DraftRules = extractSection(full, "## Draft Guidelines")
-		r.RevisionRules = extractSection(full, "## Revision Rules")
+		specs.DraftRules = extractSection(full, "## Draft Guidelines")
+		specs.RevisionRules = extractSection(full, "## Revision Rules")
 	}
 
-	promptDir := filepath.Join(r.BaseDir, "specs", "prompts")
-	entries, err := os.ReadDir(promptDir)
-	if err != nil {
-		r.Log.Printf("Prompt templates load failed: %v (keeping previous)", err)
-		return
-	}
-	templates := make(map[string]*template.Template)
-	for _, e := range entries {
-		if e.IsDir() || filepath.Ext(e.Name()) != ".md" {
-			continue
-		}
-		name := strings.TrimSuffix(e.Name(), ".md")
-		content, err := os.ReadFile(filepath.Join(promptDir, e.Name()))
+	seriesPromptDir := filepath.Join(r.BaseDir, "specs", "prompts", "series", series)
+	genericPromptDir := filepath.Join(r.BaseDir, "specs", "prompts", "generic")
+
+	seen := make(map[string]bool)
+	for _, dir := range []string{seriesPromptDir, genericPromptDir} {
+		entries, err := os.ReadDir(dir)
 		if err != nil {
-			r.Log.Printf("WARNING: could not read prompt template '%s': %v", name, err)
 			continue
 		}
-		tmpl, err := template.New(name).Parse(string(content))
-		if err != nil {
-			r.Log.Printf("WARNING: could not parse prompt template '%s': %v", name, err)
-			continue
+		for _, e := range entries {
+			if e.IsDir() || filepath.Ext(e.Name()) != ".md" {
+				continue
+			}
+			name := strings.TrimSuffix(e.Name(), ".md")
+			if name == "voice-summary" || name == "essay-rules" {
+				continue
+			}
+			if seen[name] {
+				continue
+			}
+			content, err := os.ReadFile(filepath.Join(dir, e.Name()))
+			if err != nil {
+				r.Log.Printf("[%s] WARNING: could not read prompt template '%s': %v", series, name, err)
+				continue
+			}
+			tmpl, err := template.New(name).Parse(string(content))
+			if err != nil {
+				r.Log.Printf("[%s] WARNING: could not parse prompt template '%s': %v", series, name, err)
+				continue
+			}
+			specs.PromptTemplates[name] = tmpl
+			seen[name] = true
 		}
-		templates[name] = tmpl
 	}
-	r.PromptTemplates = templates
 
 	exampleDir := filepath.Join(r.BaseDir, "specs", "examples")
-	examples := make(map[string]string)
 	exFiles, err := os.ReadDir(exampleDir)
 	if err != nil {
-		r.Log.Printf("Examples dir load failed: %v (keeping previous)", err)
+		r.Log.Printf("[%s] Examples dir load failed: %v", series, err)
 	} else {
 		for _, f := range exFiles {
 			if f.IsDir() || filepath.Ext(f.Name()) != ".md" {
@@ -251,21 +288,34 @@ func (r *Runner) loadSpecs() {
 			category := strings.TrimSuffix(f.Name(), ".md")
 			content, err := os.ReadFile(filepath.Join(exampleDir, f.Name()))
 			if err != nil {
-				r.Log.Printf("WARNING: could not read examples '%s': %v", category, err)
+				r.Log.Printf("[%s] WARNING: could not read examples '%s': %v", series, category, err)
 				continue
 			}
 			for k, v := range splitExamples(category, string(content)) {
-				examples[k] = v
+				specs.Examples[k] = v
 			}
 		}
-		r.Examples = examples
 	}
+
+	r.Log.Printf("[%s] Loaded specs (prompts: %d, examples: %d)", series, len(specs.PromptTemplates), len(specs.Examples))
+	return specs
 }
 
-func (r *Runner) executePrompt(name string, data map[string]any) string {
-	tmpl, ok := r.PromptTemplates[name]
+func (r *Runner) specsFor(series string) *seriesSpecs {
+	if s, ok := r.SeriesSpecs[series]; ok {
+		return s
+	}
+	r.Log.Printf("WARNING: no specs loaded for series '%s', loading on demand", series)
+	s := r.loadSeriesSpecs(series)
+	r.SeriesSpecs[series] = s
+	return s
+}
+
+func (r *Runner) executePrompt(series, name string, data map[string]any) string {
+	specs := r.specsFor(series)
+	tmpl, ok := specs.PromptTemplates[name]
 	if !ok {
-		r.Log.Printf("WARNING: prompt template '%s' not found", name)
+		r.Log.Printf("WARNING: prompt template '%s' not found for series '%s'", name, series)
 		return ""
 	}
 	var buf bytes.Buffer
@@ -276,10 +326,11 @@ func (r *Runner) executePrompt(name string, data map[string]any) string {
 	return buf.String()
 }
 
-func (r *Runner) buildExamples(keys ...string) string {
+func (r *Runner) buildExamples(series string, keys ...string) string {
+	specs := r.specsFor(series)
 	var parts []string
 	for _, key := range keys {
-		if ex, ok := r.Examples[key]; ok && ex != "" {
+		if ex, ok := specs.Examples[key]; ok && ex != "" {
 			parts = append(parts, ex)
 		}
 	}
@@ -479,6 +530,7 @@ func (r *Runner) processEssay(ctx context.Context, ps *PipelineState, essay *Ess
 		if timeout <= 0 {
 			timeout = 300 * time.Second
 		}
+		timeout *= time.Duration(essay.ErrorRetries + 1)
 		result, err = r.Client.Call(ctx, model, prompt, timeout)
 		if err != nil {
 			return fmt.Errorf("%s/%s: %w", essay.Slug, targetStage, err)
@@ -718,6 +770,8 @@ func (r *Runner) buildPrompt(ps *PipelineState, essay *EssayState, targetStage S
 		return "", "", fmt.Errorf("no idea metadata for %s", essay.Slug)
 	}
 
+	series := ps.Project
+
 	readContent := func(stage Stage) string {
 		path := filepath.Join(ps.BaseDir, stage.Dir(), essay.Slug+".md")
 		data, err := os.ReadFile(path)
@@ -738,20 +792,20 @@ func (r *Runner) buildPrompt(ps *PipelineState, essay *EssayState, targetStage S
 		if len(ideaContent) > 0 {
 			hook = ideaContent
 		}
-		prompt = r.researchPrompt(ideaMeta.Title, hook, hiddenMath, essay.Setting)
+		prompt = r.researchPrompt(series, ideaMeta.Title, hook, hiddenMath, essay.Setting)
 
 	case StageOutline:
 		model = r.Config.Models.Outline
 		if essay.Type == "introduction" {
 			ideaContent := readContent(StageIdeas)
-			prompt = r.introOutlinePrompt(ideaMeta.Title, ideaContent)
+			prompt = r.introOutlinePrompt(series, ideaMeta.Title, ideaContent)
 		} else {
 			research := readContent(StageResearch)
 			arc, _ := ArcByName(essay.Arc)
 			structure, _ := StructureByName(essay.Structure)
 			entry, _ := EntryByName(essay.Entry)
 			mathVis, _ := MathVisByName(essay.MathVisibility)
-			prompt = r.outlinePrompt(ideaMeta.Title, research, targetWords, arc, structure, entry, mathVis)
+			prompt = r.outlinePrompt(series, ideaMeta.Title, research, targetWords, arc, structure, entry, mathVis)
 		}
 
 	case StageDraft:
@@ -759,7 +813,7 @@ func (r *Runner) buildPrompt(ps *PipelineState, essay *EssayState, targetStage S
 		if essay.Type == "introduction" {
 			outline := readContent(StageOutline)
 			ideaContent := readContent(StageIdeas)
-			prompt = r.introDraftPrompt(ideaMeta.Title, outline, ideaContent)
+			prompt = r.introDraftPrompt(series, ideaMeta.Title, outline, ideaContent)
 		} else {
 			outline := readContent(StageOutline)
 			research := readContent(StageResearch)
@@ -768,30 +822,31 @@ func (r *Runner) buildPrompt(ps *PipelineState, essay *EssayState, targetStage S
 			entry, _ := EntryByName(essay.Entry)
 			register, _ := RegisterByName(essay.Register)
 			mathVis, _ := MathVisByName(essay.MathVisibility)
-			prompt = r.draftPrompt(ideaMeta.Title, outline, research, targetWords, arc, structure, entry, register, essay.Setting, mathVis)
+			prompt = r.draftPrompt(series, ideaMeta.Title, outline, research, targetWords, arc, structure, entry, register, essay.Setting, mathVis)
 		}
 
 	case StageFactcheck:
 		model = r.Config.Models.Factcheck
 		draft := readContent(StageDraft)
 		research := readContent(StageResearch)
-		prompt = r.factcheckPrompt(ideaMeta.Title, draft, research)
+		prompt = r.factcheckPrompt(series, ideaMeta.Title, draft, research)
 
 	case StageDraft2:
 		model = r.Config.Models.Draft2
-		if essay.Type == "section" {
+		switch essay.Type {
+		case "section":
 			ideaContent := readContent(StageIdeas)
-			prompt = r.sectionDraft2Prompt(ideaMeta.Title, ideaContent, ideaMeta.PartTitle)
-		} else if essay.Type == "introduction" {
+			prompt = r.sectionDraft2Prompt(series, ideaMeta.Title, ideaContent, ideaMeta.PartTitle)
+		case "introduction":
 			draft := readContent(StageDraft)
-			prompt = r.introDraft2Prompt(ideaMeta.Title, draft)
-		} else {
+			prompt = r.introDraft2Prompt(series, ideaMeta.Title, draft)
+		default:
 			draft := readContent(StageDraft)
 			factcheck := readContent(StageFactcheck)
 			illustrate := readContent(StageIllustrate)
 			arc, _ := ArcByName(essay.Arc)
 			register, _ := RegisterByName(essay.Register)
-			prompt = r.draft2Prompt(ideaMeta.Title, draft, factcheck, illustrate, targetWords, arc, register)
+			prompt = r.draft2Prompt(series, ideaMeta.Title, draft, factcheck, illustrate, targetWords, arc, register)
 		}
 
 	case StageIllustrate:
@@ -799,7 +854,7 @@ func (r *Runner) buildPrompt(ps *PipelineState, essay *EssayState, targetStage S
 		draft := readContent(StageDraft)
 		factcheck := readContent(StageFactcheck)
 		mathVis, _ := MathVisByName(essay.MathVisibility)
-		prompt = r.illustratePrompt(ideaMeta.Title, draft, factcheck, essay.Slug, essay.Setting, mathVis)
+		prompt = r.illustratePrompt(series, ideaMeta.Title, draft, factcheck, essay.Slug, essay.Setting, mathVis)
 
 	default:
 		return "", "", fmt.Errorf("unknown target stage: %s", targetStage)

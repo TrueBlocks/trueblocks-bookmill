@@ -2,12 +2,12 @@ package pipeline
 
 import "fmt"
 
-func (r *Runner) researchPrompt(title, hook, hiddenMath, setting string) string {
+func (r *Runner) researchPrompt(series, title, hook, hiddenMath, setting string) string {
 	settingDirective := ""
 	if setting != "" {
 		settingDirective = fmt.Sprintf("\nSETTING CONTEXT: %s\nWhen choosing examples, historical context, and cultural references, ground them in this setting where natural. Don't force it — but let the setting inform the kind of examples you reach for.\n", setting)
 	}
-	return r.executePrompt("research", map[string]any{
+	return r.executePrompt(series, "research", map[string]any{
 		"Title":            title,
 		"Hook":             hook,
 		"HiddenMath":       hiddenMath,
@@ -15,7 +15,7 @@ func (r *Runner) researchPrompt(title, hook, hiddenMath, setting string) string 
 	})
 }
 
-func (r *Runner) outlinePrompt(title, researchContent string, targetWords int, arc NarrativeArc, structure StructureHint, entry EntryHint, mathVis MathVisHint) string {
+func (r *Runner) outlinePrompt(series, title, researchContent string, targetWords int, arc NarrativeArc, structure StructureHint, entry EntryHint, mathVis MathVisHint) string {
 	extraDirectives := ""
 	if structure.OutlineHint != "" {
 		extraDirectives += "\n" + structure.OutlineHint + "\n"
@@ -26,13 +26,13 @@ func (r *Runner) outlinePrompt(title, researchContent string, targetWords int, a
 	if mathVis.OutlineHint != "" {
 		extraDirectives += "\n" + mathVis.OutlineHint + "\n"
 	}
-	examples := r.buildExamples(
+	examples := r.buildExamples(series,
 		"arcs/"+arc.Name,
 		"structures/"+structure.Name,
 		"entries/"+entry.Name,
 		"mathvis/"+mathVis.Name,
 	)
-	return r.executePrompt("outline", map[string]any{
+	return r.executePrompt(series, "outline", map[string]any{
 		"Title":             title,
 		"TargetWords":       targetWords,
 		"ReadMinutes":       targetWords / 265,
@@ -43,7 +43,8 @@ func (r *Runner) outlinePrompt(title, researchContent string, targetWords int, a
 	})
 }
 
-func (r *Runner) draftPrompt(title, outlineContent, researchContent string, targetWords int, arc NarrativeArc, structure StructureHint, entry EntryHint, register RegisterHint, setting string, mathVis MathVisHint) string {
+func (r *Runner) draftPrompt(series, title, outlineContent, researchContent string, targetWords int, arc NarrativeArc, structure StructureHint, entry EntryHint, register RegisterHint, setting string, mathVis MathVisHint) string {
+	specs := r.specsFor(series)
 	arcDirective := ""
 	if arc.DraftHint != "" {
 		arcDirective = fmt.Sprintf("\nNARRATIVE ARC: %s\n%s\n", arc.Label, arc.DraftHint)
@@ -63,35 +64,35 @@ func (r *Runner) draftPrompt(title, outlineContent, researchContent string, targ
 	if mathVis.DraftHint != "" {
 		arcDirective += "\n" + mathVis.DraftHint + "\n"
 	}
-	examples := r.buildExamples(
+	examples := r.buildExamples(series,
 		"arcs/"+arc.Name,
 		"structures/"+structure.Name,
 		"entries/"+entry.Name,
 		"registers/"+register.Name,
 		"mathvis/"+mathVis.Name,
 	)
-	return r.executePrompt("draft", map[string]any{
+	return r.executePrompt(series, "draft", map[string]any{
 		"Title":             title,
 		"TargetWords":       targetWords,
 		"ReadMinutes":       targetWords / 265,
 		"ArcDirective":      arcDirective,
 		"OutlineContent":    outlineContent,
 		"ResearchContent":   researchContent,
-		"VoiceProfile":      r.VoiceProfile,
-		"DraftRules":        r.DraftRules,
+		"VoiceProfile":      specs.VoiceProfile,
+		"DraftRules":        specs.DraftRules,
 		"AttributeExamples": examples,
 	})
 }
 
-func (r *Runner) factcheckPrompt(title, draftContent, researchContent string) string {
-	return r.executePrompt("factcheck", map[string]any{
+func (r *Runner) factcheckPrompt(series, title, draftContent, researchContent string) string {
+	return r.executePrompt(series, "factcheck", map[string]any{
 		"Title":           title,
 		"DraftContent":    draftContent,
 		"ResearchContent": researchContent,
 	})
 }
 
-func (r *Runner) illustratePrompt(title, draftContent, factcheckContent, slug, setting string, mathVis MathVisHint) string {
+func (r *Runner) illustratePrompt(series, title, draftContent, factcheckContent, slug, setting string, mathVis MathVisHint) string {
 	contextDirectives := ""
 	if setting != "" {
 		contextDirectives += fmt.Sprintf("\nSETTING: %s — let this inform the visual style and imagery choices.\n", setting)
@@ -99,7 +100,7 @@ func (r *Runner) illustratePrompt(title, draftContent, factcheckContent, slug, s
 	if mathVis.DraftHint != "" {
 		contextDirectives += "\n" + mathVis.DraftHint + "\nChoose image types and density accordingly.\n"
 	}
-	return r.executePrompt("illustrate", map[string]any{
+	return r.executePrompt(series, "illustrate", map[string]any{
 		"Title":             title,
 		"Slug":              slug,
 		"ContextDirectives": contextDirectives,
@@ -108,7 +109,8 @@ func (r *Runner) illustratePrompt(title, draftContent, factcheckContent, slug, s
 	})
 }
 
-func (r *Runner) draft2Prompt(title, draftContent, factcheckContent, illustrateContent string, targetWords int, arc NarrativeArc, register RegisterHint) string {
+func (r *Runner) draft2Prompt(series, title, draftContent, factcheckContent, illustrateContent string, targetWords int, arc NarrativeArc, register RegisterHint) string {
+	specs := r.specsFor(series)
 	arcDirective := ""
 	if arc.DraftHint != "" {
 		arcDirective = fmt.Sprintf("\nNARRATIVE ARC: %s\n%s\n", arc.Label, arc.DraftHint)
@@ -116,11 +118,11 @@ func (r *Runner) draft2Prompt(title, draftContent, factcheckContent, illustrateC
 	if register.DraftHint != "" {
 		arcDirective += "\n" + register.DraftHint + "\nEnforce this register throughout the revision. If the original draft drifts into a different tone, correct it.\n"
 	}
-	examples := r.buildExamples(
+	examples := r.buildExamples(series,
 		"arcs/"+arc.Name,
 		"registers/"+register.Name,
 	)
-	return r.executePrompt("draft2", map[string]any{
+	return r.executePrompt(series, "draft2", map[string]any{
 		"Title":             title,
 		"TargetWords":       targetWords,
 		"ReadMinutes":       targetWords / 265,
@@ -128,37 +130,37 @@ func (r *Runner) draft2Prompt(title, draftContent, factcheckContent, illustrateC
 		"DraftContent":      draftContent,
 		"FactcheckContent":  factcheckContent,
 		"IllustrateContent": illustrateContent,
-		"RevisionRules":     r.RevisionRules,
-		"VoiceAntiPatterns": r.VoiceAntiPatterns,
+		"RevisionRules":     specs.RevisionRules,
+		"VoiceAntiPatterns": specs.VoiceAntiPatterns,
 		"AttributeExamples": examples,
 	})
 }
 
-func (r *Runner) sectionDraft2Prompt(title, ideaContent, partTitle string) string {
-	return r.executePrompt("section-draft2", map[string]any{
+func (r *Runner) sectionDraft2Prompt(series, title, ideaContent, partTitle string) string {
+	return r.executePrompt(series, "section-draft2", map[string]any{
 		"Title":       title,
 		"PartTitle":   partTitle,
 		"IdeaContent": ideaContent,
 	})
 }
 
-func (r *Runner) introOutlinePrompt(title, ideaContent string) string {
-	return r.executePrompt("intro-outline", map[string]any{
+func (r *Runner) introOutlinePrompt(series, title, ideaContent string) string {
+	return r.executePrompt(series, "intro-outline", map[string]any{
 		"Title":       title,
 		"IdeaContent": ideaContent,
 	})
 }
 
-func (r *Runner) introDraftPrompt(title, outlineContent, ideaContent string) string {
-	return r.executePrompt("intro-draft", map[string]any{
+func (r *Runner) introDraftPrompt(series, title, outlineContent, ideaContent string) string {
+	return r.executePrompt(series, "intro-draft", map[string]any{
 		"Title":          title,
 		"OutlineContent": outlineContent,
 		"IdeaContent":    ideaContent,
 	})
 }
 
-func (r *Runner) introDraft2Prompt(title, draftContent string) string {
-	return r.executePrompt("intro-draft2", map[string]any{
+func (r *Runner) introDraft2Prompt(series, title, draftContent string) string {
+	return r.executePrompt(series, "intro-draft2", map[string]any{
 		"Title":        title,
 		"DraftContent": draftContent,
 	})

@@ -1,0 +1,874 @@
+{
+  "reverted": [
+    {
+      "slug": "frumpys-morning",
+      "stage": "research",
+      "series": "extra-dwarfs",
+      "tokens_in": 557,
+      "tokens_out": 2528,
+      "cost": 0.039591,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "frumpys-morning",
+      "stage": "outline",
+      "series": "extra-dwarfs",
+      "tokens_in": 2896,
+      "tokens_out": 1470,
+      "cost": 0.030738,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "frumpys-morning",
+      "stage": "draft",
+      "series": "extra-dwarfs",
+      "tokens_in": 5559,
+      "tokens_out": 2059,
+      "cost": 0.047562,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "frumpys-morning",
+      "stage": "factcheck",
+      "series": "extra-dwarfs",
+      "tokens_in": 4935,
+      "tokens_out": 1282,
+      "cost": 0.034035,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "frumpys-morning",
+      "stage": "illustrate",
+      "series": "extra-dwarfs",
+      "tokens_in": 7740,
+      "tokens_out": 3678,
+      "cost": 0.07839,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "frumpys-morning",
+      "stage": "draft2",
+      "series": "extra-dwarfs",
+      "tokens_in": 6475,
+      "tokens_out": 2116,
+      "cost": 0.051165,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "nurses-rounds",
+      "stage": "research",
+      "series": "extra-dwarfs",
+      "tokens_in": 554,
+      "tokens_out": 2795,
+      "cost": 0.043587,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "nurses-rounds",
+      "stage": "outline",
+      "series": "extra-dwarfs",
+      "tokens_in": 3162,
+      "tokens_out": 1326,
+      "cost": 0.029376,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "nurses-rounds",
+      "stage": "draft",
+      "series": "extra-dwarfs",
+      "tokens_in": 5682,
+      "tokens_out": 2393,
+      "cost": 0.052941,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "nurses-rounds",
+      "stage": "factcheck",
+      "series": "extra-dwarfs",
+      "tokens_in": 5535,
+      "tokens_out": 1275,
+      "cost": 0.035730000000000005,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "nurses-rounds",
+      "stage": "illustrate",
+      "series": "extra-dwarfs",
+      "tokens_in": 8064,
+      "tokens_out": 4104,
+      "cost": 0.08575200000000001,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "nurses-rounds",
+      "stage": "draft2",
+      "series": "extra-dwarfs",
+      "tokens_in": 7137,
+      "tokens_out": 2459,
+      "cost": 0.058296,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "the-compound",
+      "stage": "outline",
+      "series": "extra-dwarfs",
+      "tokens_in": 281,
+      "tokens_out": 441,
+      "cost": 0.007458,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "the-compound",
+      "stage": "draft",
+      "series": "extra-dwarfs",
+      "tokens_in": 771,
+      "tokens_out": 577,
+      "cost": 0.010968,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "the-compound",
+      "stage": "draft2",
+      "series": "extra-dwarfs",
+      "tokens_in": 800,
+      "tokens_out": 502,
+      "cost": 0.00993,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "the-great-spat",
+      "stage": "research",
+      "series": "extra-dwarfs",
+      "tokens_in": 555,
+      "tokens_out": 2641,
+      "cost": 0.041280000000000004,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "the-great-spat",
+      "stage": "outline",
+      "series": "extra-dwarfs",
+      "tokens_in": 3008,
+      "tokens_out": 1961,
+      "cost": 0.038439,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "the-great-spat",
+      "stage": "draft",
+      "series": "extra-dwarfs",
+      "tokens_in": 6163,
+      "tokens_out": 1511,
+      "cost": 0.041154,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "the-great-spat",
+      "stage": "factcheck",
+      "series": "extra-dwarfs",
+      "tokens_in": 4499,
+      "tokens_out": 1394,
+      "cost": 0.034407,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "the-great-spat",
+      "stage": "illustrate",
+      "series": "extra-dwarfs",
+      "tokens_in": 7304,
+      "tokens_out": 3347,
+      "cost": 0.072117,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "the-great-spat",
+      "stage": "draft2",
+      "series": "extra-dwarfs",
+      "tokens_in": 5491,
+      "tokens_out": 1635,
+      "cost": 0.040998,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "after-happily-ever-after",
+      "stage": "research",
+      "series": "extra-dwarfs",
+      "tokens_in": 550,
+      "tokens_out": 2496,
+      "cost": 0.03909,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "after-happily-ever-after",
+      "stage": "outline",
+      "series": "extra-dwarfs",
+      "tokens_in": 2864,
+      "tokens_out": 1603,
+      "cost": 0.032637,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "after-happily-ever-after",
+      "stage": "draft",
+      "series": "extra-dwarfs",
+      "tokens_in": 5661,
+      "tokens_out": 1971,
+      "cost": 0.046548,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "after-happily-ever-after",
+      "stage": "factcheck",
+      "series": "extra-dwarfs",
+      "tokens_in": 4815,
+      "tokens_out": 1204,
+      "cost": 0.032505,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "after-happily-ever-after",
+      "stage": "illustrate",
+      "series": "extra-dwarfs",
+      "tokens_in": 7577,
+      "tokens_out": 3176,
+      "cost": 0.070371,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "after-happily-ever-after",
+      "stage": "draft2",
+      "series": "extra-dwarfs",
+      "tokens_in": 6222,
+      "tokens_out": 1845,
+      "cost": 0.046341,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "seven-ways-forward",
+      "stage": "research",
+      "series": "extra-dwarfs",
+      "tokens_in": 548,
+      "tokens_out": 2461,
+      "cost": 0.038559,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "seven-ways-forward",
+      "stage": "outline",
+      "series": "extra-dwarfs",
+      "tokens_in": 2826,
+      "tokens_out": 2025,
+      "cost": 0.038853,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "seven-ways-forward",
+      "stage": "draft",
+      "series": "extra-dwarfs",
+      "tokens_in": 11270,
+      "tokens_out": 5602,
+      "cost": 0.11784,
+      "model": "claude-sonnet-4-20250514",
+      "count": 2
+    },
+    {
+      "slug": "seven-ways-forward",
+      "stage": "factcheck",
+      "series": "extra-dwarfs",
+      "tokens_in": 23706,
+      "tokens_out": 4748,
+      "cost": 0.14233800000000002,
+      "model": "claude-sonnet-4-20250514",
+      "count": 4
+    },
+    {
+      "slug": "seven-ways-forward",
+      "stage": "illustrate",
+      "series": "extra-dwarfs",
+      "tokens_in": 13242,
+      "tokens_out": 7368,
+      "cost": 0.150246,
+      "model": "claude-sonnet-4-20250514",
+      "count": 2
+    },
+    {
+      "slug": "seven-ways-forward",
+      "stage": "draft2",
+      "series": "extra-dwarfs",
+      "tokens_in": 6134,
+      "tokens_out": 1985,
+      "cost": 0.048177000000000005,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "neutral-territory",
+      "stage": "research",
+      "series": "extra-dwarfs",
+      "tokens_in": 546,
+      "tokens_out": 2222,
+      "cost": 0.034968,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "neutral-territory",
+      "stage": "outline",
+      "series": "extra-dwarfs",
+      "tokens_in": 2587,
+      "tokens_out": 1504,
+      "cost": 0.030321,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "neutral-territory",
+      "stage": "draft",
+      "series": "extra-dwarfs",
+      "tokens_in": 5285,
+      "tokens_out": 2073,
+      "cost": 0.04695,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "neutral-territory",
+      "stage": "factcheck",
+      "series": "extra-dwarfs",
+      "tokens_in": 4640,
+      "tokens_out": 1341,
+      "cost": 0.034035,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "neutral-territory",
+      "stage": "illustrate",
+      "series": "extra-dwarfs",
+      "tokens_in": 7808,
+      "tokens_out": 2716,
+      "cost": 0.064164,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "neutral-territory",
+      "stage": "draft2",
+      "series": "extra-dwarfs",
+      "tokens_in": 6551,
+      "tokens_out": 1997,
+      "cost": 0.049608,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "the-prince-charming-theory",
+      "stage": "research",
+      "series": "extra-dwarfs",
+      "tokens_in": 558,
+      "tokens_out": 2447,
+      "cost": 0.038379,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "the-prince-charming-theory",
+      "stage": "outline",
+      "series": "extra-dwarfs",
+      "tokens_in": 2815,
+      "tokens_out": 1852,
+      "cost": 0.036225,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "the-prince-charming-theory",
+      "stage": "draft",
+      "series": "extra-dwarfs",
+      "tokens_in": 5861,
+      "tokens_out": 2144,
+      "cost": 0.049743,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "the-prince-charming-theory",
+      "stage": "factcheck",
+      "series": "extra-dwarfs",
+      "tokens_in": 4939,
+      "tokens_out": 1351,
+      "cost": 0.035082,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "the-prince-charming-theory",
+      "stage": "illustrate",
+      "series": "extra-dwarfs",
+      "tokens_in": 7897,
+      "tokens_out": 3465,
+      "cost": 0.075666,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "the-prince-charming-theory",
+      "stage": "draft2",
+      "series": "extra-dwarfs",
+      "tokens_in": 6687,
+      "tokens_out": 2122,
+      "cost": 0.051891,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "snows-deepest-hour",
+      "stage": "research",
+      "series": "extra-dwarfs",
+      "tokens_in": 560,
+      "tokens_out": 2519,
+      "cost": 0.039465,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "snows-deepest-hour",
+      "stage": "outline",
+      "series": "extra-dwarfs",
+      "tokens_in": 2887,
+      "tokens_out": 1977,
+      "cost": 0.038316,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "snows-deepest-hour",
+      "stage": "draft",
+      "series": "extra-dwarfs",
+      "tokens_in": 6058,
+      "tokens_out": 2215,
+      "cost": 0.051399,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "snows-deepest-hour",
+      "stage": "factcheck",
+      "series": "extra-dwarfs",
+      "tokens_in": 5082,
+      "tokens_out": 1339,
+      "cost": 0.035331,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "snows-deepest-hour",
+      "stage": "illustrate",
+      "series": "extra-dwarfs",
+      "tokens_in": 7955,
+      "tokens_out": 3573,
+      "cost": 0.07746,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "snows-deepest-hour",
+      "stage": "draft2",
+      "series": "extra-dwarfs",
+      "tokens_in": 6833,
+      "tokens_out": 1659,
+      "cost": 0.045384,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "the-morning-before",
+      "stage": "research",
+      "series": "extra-dwarfs",
+      "tokens_in": 544,
+      "tokens_out": 2883,
+      "cost": 0.044877,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "the-morning-before",
+      "stage": "outline",
+      "series": "extra-dwarfs",
+      "tokens_in": 3248,
+      "tokens_out": 1830,
+      "cost": 0.037194000000000005,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "the-morning-before",
+      "stage": "draft",
+      "series": "extra-dwarfs",
+      "tokens_in": 6272,
+      "tokens_out": 2661,
+      "cost": 0.058731,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "the-morning-before",
+      "stage": "factcheck",
+      "series": "extra-dwarfs",
+      "tokens_in": 5889,
+      "tokens_out": 1434,
+      "cost": 0.039177000000000003,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "the-morning-before",
+      "stage": "illustrate",
+      "series": "extra-dwarfs",
+      "tokens_in": 8491,
+      "tokens_out": 3447,
+      "cost": 0.077178,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "the-morning-before",
+      "stage": "draft2",
+      "series": "extra-dwarfs",
+      "tokens_in": 7822,
+      "tokens_out": 2751,
+      "cost": 0.064731,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "manics-highs-and-lows",
+      "stage": "research",
+      "series": "extra-dwarfs",
+      "tokens_in": 1288,
+      "tokens_out": 4622,
+      "cost": 0.073194,
+      "model": "claude-sonnet-4-20250514",
+      "count": 2
+    },
+    {
+      "slug": "manics-highs-and-lows",
+      "stage": "outline",
+      "series": "extra-dwarfs",
+      "tokens_in": 5379,
+      "tokens_out": 3216,
+      "cost": 0.064377,
+      "model": "claude-sonnet-4-20250514",
+      "count": 2
+    },
+    {
+      "slug": "manics-highs-and-lows",
+      "stage": "draft",
+      "series": "extra-dwarfs",
+      "tokens_in": 10979,
+      "tokens_out": 5927,
+      "cost": 0.121842,
+      "model": "claude-sonnet-4-20250514",
+      "count": 2
+    },
+    {
+      "slug": "manics-highs-and-lows",
+      "stage": "factcheck",
+      "series": "extra-dwarfs",
+      "tokens_in": 11287,
+      "tokens_out": 2308,
+      "cost": 0.06848100000000001,
+      "model": "claude-sonnet-4-20250514",
+      "count": 2
+    },
+    {
+      "slug": "manics-highs-and-lows",
+      "stage": "illustrate",
+      "series": "extra-dwarfs",
+      "tokens_in": 7385,
+      "tokens_out": 2632,
+      "cost": 0.061635,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "manics-highs-and-lows",
+      "stage": "draft2",
+      "series": "extra-dwarfs",
+      "tokens_in": 5776,
+      "tokens_out": 1771,
+      "cost": 0.043893,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "sillys-escape",
+      "stage": "research",
+      "series": "extra-dwarfs",
+      "tokens_in": 547,
+      "tokens_out": 2829,
+      "cost": 0.044076000000000004,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "sillys-escape",
+      "stage": "outline",
+      "series": "extra-dwarfs",
+      "tokens_in": 3196,
+      "tokens_out": 1649,
+      "cost": 0.034323,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "sillys-escape",
+      "stage": "draft",
+      "series": "extra-dwarfs",
+      "tokens_in": 6039,
+      "tokens_out": 2981,
+      "cost": 0.062832,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "sillys-escape",
+      "stage": "factcheck",
+      "series": "extra-dwarfs",
+      "tokens_in": 6157,
+      "tokens_out": 1318,
+      "cost": 0.038241000000000004,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "sillys-escape",
+      "stage": "illustrate",
+      "series": "extra-dwarfs",
+      "tokens_in": 8697,
+      "tokens_out": 3914,
+      "cost": 0.084801,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "sillys-escape",
+      "stage": "draft2",
+      "series": "extra-dwarfs",
+      "tokens_in": 8342,
+      "tokens_out": 1933,
+      "cost": 0.054021,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "brainiacs-analysis",
+      "stage": "research",
+      "series": "extra-dwarfs",
+      "tokens_in": 553,
+      "tokens_out": 2264,
+      "cost": 0.035619,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "brainiacs-analysis",
+      "stage": "outline",
+      "series": "extra-dwarfs",
+      "tokens_in": 2632,
+      "tokens_out": 1573,
+      "cost": 0.031491,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "brainiacs-analysis",
+      "stage": "draft",
+      "series": "extra-dwarfs",
+      "tokens_in": 5399,
+      "tokens_out": 2502,
+      "cost": 0.053727000000000004,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "brainiacs-analysis",
+      "stage": "factcheck",
+      "series": "extra-dwarfs",
+      "tokens_in": 5114,
+      "tokens_out": 1324,
+      "cost": 0.035202,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "brainiacs-analysis",
+      "stage": "illustrate",
+      "series": "extra-dwarfs",
+      "tokens_in": 8225,
+      "tokens_out": 3638,
+      "cost": 0.079245,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "brainiacs-analysis",
+      "stage": "draft2",
+      "series": "extra-dwarfs",
+      "tokens_in": 7397,
+      "tokens_out": 2611,
+      "cost": 0.061356,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "dumpys-defense",
+      "stage": "research",
+      "series": "extra-dwarfs",
+      "tokens_in": 563,
+      "tokens_out": 2200,
+      "cost": 0.034689,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "dumpys-defense",
+      "stage": "outline",
+      "series": "extra-dwarfs",
+      "tokens_in": 2567,
+      "tokens_out": 1657,
+      "cost": 0.032556,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "dumpys-defense",
+      "stage": "draft",
+      "series": "extra-dwarfs",
+      "tokens_in": 5418,
+      "tokens_out": 1565,
+      "cost": 0.039729,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "dumpys-defense",
+      "stage": "factcheck",
+      "series": "extra-dwarfs",
+      "tokens_in": 4112,
+      "tokens_out": 1272,
+      "cost": 0.031416,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "dumpys-defense",
+      "stage": "illustrate",
+      "series": "extra-dwarfs",
+      "tokens_in": 7235,
+      "tokens_out": 2805,
+      "cost": 0.06378,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "dumpys-defense",
+      "stage": "draft2",
+      "series": "extra-dwarfs",
+      "tokens_in": 5476,
+      "tokens_out": 1722,
+      "cost": 0.042258000000000004,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "chronically-ills-diagnosis",
+      "stage": "research",
+      "series": "extra-dwarfs",
+      "tokens_in": 569,
+      "tokens_out": 2702,
+      "cost": 0.042237000000000004,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "chronically-ills-diagnosis",
+      "stage": "outline",
+      "series": "extra-dwarfs",
+      "tokens_in": 3070,
+      "tokens_out": 1837,
+      "cost": 0.036765,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "chronically-ills-diagnosis",
+      "stage": "draft",
+      "series": "extra-dwarfs",
+      "tokens_in": 6103,
+      "tokens_out": 1235,
+      "cost": 0.036834,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "chronically-ills-diagnosis",
+      "stage": "factcheck",
+      "series": "extra-dwarfs",
+      "tokens_in": 4287,
+      "tokens_out": 1141,
+      "cost": 0.029976000000000003,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "chronically-ills-diagnosis",
+      "stage": "illustrate",
+      "series": "extra-dwarfs",
+      "tokens_in": 6779,
+      "tokens_out": 2450,
+      "cost": 0.057087,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    },
+    {
+      "slug": "chronically-ills-diagnosis",
+      "stage": "draft2",
+      "series": "extra-dwarfs",
+      "tokens_in": 4686,
+      "tokens_out": 1419,
+      "cost": 0.035343,
+      "model": "claude-sonnet-4-20250514",
+      "count": 1
+    }
+  ]
+}
