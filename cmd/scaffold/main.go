@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -49,24 +48,29 @@ type attrFile struct {
 }
 
 func loadAttributes(designDir string) (map[string]attrEntry, error) {
-	pattern := filepath.Join(designDir, "*attributes.yaml")
-	matches, err := filepath.Glob(pattern)
-	if err != nil {
-		return nil, err
-	}
 	lookup := make(map[string]attrEntry)
-	for _, path := range matches {
+	err := filepath.WalkDir(designDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(d.Name(), "attributes.yaml") {
+			return nil
+		}
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return nil, fmt.Errorf("reading %s: %w", path, err)
+			return fmt.Errorf("reading %s: %w", path, err)
 		}
 		var af attrFile
 		if err := yaml.Unmarshal(data, &af); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", path, err)
+			return fmt.Errorf("parsing %s: %w", path, err)
 		}
 		for _, e := range af.Essays {
 			lookup[e.Slug] = e
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return lookup, nil
 }
@@ -213,11 +217,6 @@ type series struct {
 }
 
 func discoverSeries(designDir string) ([]series, error) {
-	entries, err := os.ReadDir(designDir)
-	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w", designDir, err)
-	}
-
 	romanNumerals := []string{"I", "II", "III", "IV", "V"}
 	groups := map[string][]struct {
 		file string
@@ -225,11 +224,18 @@ func discoverSeries(designDir string) ([]series, error) {
 	}{}
 	hasNumeral := map[string]bool{}
 
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasPrefix(e.Name(), "Plan for ") || !strings.HasSuffix(e.Name(), ".md") {
-			continue
+	err := filepath.WalkDir(designDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
-		name := strings.TrimPrefix(e.Name(), "Plan for ")
+		if d.IsDir() || !strings.HasPrefix(d.Name(), "Plan for ") || !strings.HasSuffix(d.Name(), ".md") {
+			return nil
+		}
+		relPath, err := filepath.Rel(designDir, path)
+		if err != nil {
+			return err
+		}
+		name := strings.TrimPrefix(d.Name(), "Plan for ")
 		name = strings.TrimSuffix(name, ".md")
 		name = strings.TrimSpace(name)
 
@@ -248,7 +254,11 @@ func discoverSeries(designDir string) ([]series, error) {
 		groups[base] = append(groups[base], struct {
 			file string
 			book string
-		}{file: e.Name(), book: book})
+		}{file: relPath, book: book})
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("walking %s: %w", designDir, err)
 	}
 
 	var result []series
@@ -311,8 +321,6 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Printf("Loaded %d attribute entries\n", len(attrs))
-
-	now := time.Now().Format("2006-01-02")
 
 	for _, s := range allSeries {
 		items, err := loadAllItems(designDir, s.plans)
@@ -400,10 +408,9 @@ func main() {
 				"entry: %s\n"+
 				"register: %s\n"+
 				"setting: \"%s\"\n"+
-				"math_visibility: %s\n"+
-				"created: %s\n",
+				"math_visibility: %s\n",
 				it.Slug, it.Title, it.Type, s.slug, it.Book, it.Part, it.PartTitle, it.Order,
-				it.Arc, it.Ending, it.Structure, it.Entry, it.Register, it.Setting, it.MathVisibility, now)
+				it.Arc, it.Ending, it.Structure, it.Entry, it.Register, it.Setting, it.MathVisibility)
 
 			mdPath := filepath.Join(baseDir, it.Slug+".md")
 			metaPath := filepath.Join(baseDir, it.Slug+".meta.yaml")
