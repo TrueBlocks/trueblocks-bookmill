@@ -223,10 +223,13 @@ type statusResponse struct {
 }
 
 type projectStatusResponse struct {
-	Name    string         `json:"name"`
-	Cycle   int            `json:"cycle"`
-	Cost    float64        `json:"cost"`
-	Summary map[string]int `json:"summary"`
+	Name           string         `json:"name"`
+	Cycle          int            `json:"cycle"`
+	Cost           float64        `json:"cost"`
+	Summary        map[string]int `json:"summary"`
+	HasBlurb       bool           `json:"has_blurb"`
+	HasCoverPrompt bool           `json:"has_cover_prompt"`
+	HasCoverImage  bool           `json:"has_cover_image"`
 }
 
 func (d *Dashboard) handleStatus(w http.ResponseWriter, r *http.Request) {
@@ -257,11 +260,15 @@ func (d *Dashboard) handleStatus(w http.ResponseWriter, r *http.Request) {
 	var projectStatuses []projectStatusResponse
 	for _, ps := range d.Runner.Projects {
 		s := ps.Summary()
+		bookDir := filepath.Join(ps.BaseDir, "book")
 		projectStatuses = append(projectStatuses, projectStatusResponse{
-			Name:    ps.Project,
-			Cycle:   ps.CycleCount,
-			Cost:    ps.TotalCost,
-			Summary: s,
+			Name:           ps.Project,
+			Cycle:          ps.CycleCount,
+			Cost:           ps.TotalCost,
+			Summary:        s,
+			HasBlurb:       bookDirHasFile(bookDir, "back-cover-blurb.md"),
+			HasCoverPrompt: bookDirHasFile(bookDir, "front-cover-prompt.md"),
+			HasCoverImage:  bookDirHasFile(bookDir, "front-cover.png"),
 		})
 		for k, v := range s {
 			totalSummary[k] += v
@@ -663,6 +670,10 @@ func (d *Dashboard) handleRevert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if target < StageIllustrate {
+		invalidateBookArtifacts(ps.BaseDir)
+	}
+
 	d.Runner.Log.Printf("[%s] REVERT %s to %s (removed: %v)", project, slug, stage, removed)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -715,6 +726,10 @@ func (d *Dashboard) handleRevertAll(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		reverted++
+	}
+
+	if target < StageIllustrate {
+		invalidateBookArtifacts(ps.BaseDir)
 	}
 
 	d.Runner.Log.Printf("[%s] REVERT-ALL to %s (%d reverted, %d errors)", project, stage, reverted, len(errors))
@@ -992,6 +1007,10 @@ const dashboardHTML = `<!DOCTYPE html>
          color: #8899aa; font-size: 0.85rem; border: 1px solid #2a2a4e; }
   .tab.active { background: #e94560; color: white; border-color: #e94560; }
   .tab:hover { border-color: #e94560; }
+  .book-dots { display: inline-flex; gap: 3px; margin-left: 6px; vertical-align: middle; }
+  .book-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .book-dot.done { background: #4ade80; }
+  .book-dot.missing { background: #555; }
   table { width: 100%; border-collapse: collapse; margin-top: 12px; }
   th { text-align: left; padding: 8px 12px; background: #16213e; color: #8899aa;
        font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; }
@@ -1261,8 +1280,13 @@ async function refresh() {
   var tabs = document.getElementById('projectTabs');
   var tabsHtml = '<div class="tab' + (activeProject===''?' active':'') + '" onclick="filterProject(\x27\x27)">All</div>';
   projects.forEach(function(p) {
+    var dots = '<span class="book-dots" title="blurb / cover-prompt / cover-image">' +
+      '<span class="book-dot ' + (p.has_blurb?'done':'missing') + '" title="blurb"></span>' +
+      '<span class="book-dot ' + (p.has_cover_prompt?'done':'missing') + '" title="cover prompt"></span>' +
+      '<span class="book-dot ' + (p.has_cover_image?'done':'missing') + '" title="cover image"></span>' +
+      '</span>';
     tabsHtml += '<div class="tab' + (activeProject===p.name?' active':'') +
-      '" onclick="filterProject(\x27' + esc(p.name) + '\x27)"> ' + esc(p.name) + '</div>';
+      '" onclick="filterProject(\x27' + esc(p.name) + '\x27)">' + esc(p.name) + dots + '</div>';
   });
   tabs.innerHTML = tabsHtml;
   updateRing();

@@ -109,9 +109,11 @@ func (r *Runner) docxWorker() {
 		r.Log.Printf("  [docx] %s: Word upgrade starting", job.essay.Slug)
 		if err := r.upgradeDocx(dstFile); err != nil {
 			r.Log.Printf("  [docx] WARNING: Word upgrade %s: %v", job.essay.Slug, err)
-		} else {
-			r.Log.Printf("  [docx] %s: complete", job.essay.Slug)
 		}
+
+		r.swapImages(job.ps, job.essay, dstFile)
+
+		r.Log.Printf("  [docx] %s: complete", job.essay.Slug)
 	}
 }
 
@@ -394,6 +396,8 @@ func (r *Runner) runProjectCycle(ctx context.Context, ps *PipelineState) ([]stri
 		return nil, fmt.Errorf("loading state: %w", err)
 	}
 
+	r.generateBookArtifacts(ps)
+
 	selected := ps.SelectForCycle(&r.Config.Pipeline)
 	if len(selected) == 0 {
 		r.Log.Printf("[%s] Cycle: nothing to do", ps.Project)
@@ -459,6 +463,8 @@ func (r *Runner) runProjectCycle(ctx context.Context, ps *PipelineState) ([]stri
 	}
 
 	wg.Wait()
+
+	r.generateBookArtifacts(ps)
 
 	var actions []string
 	for _, res := range results {
@@ -566,6 +572,7 @@ func (r *Runner) processDocxSync(ps *PipelineState, essay *EssayState) error {
 	if err := r.upgradeDocx(dstFile); err != nil {
 		r.Log.Printf("    WARNING: Word upgrade %s: %v", essay.Slug, err)
 	}
+	r.swapImages(ps, essay, dstFile)
 	return nil
 }
 
@@ -620,11 +627,6 @@ func (r *Runner) exportEssay(ps *PipelineState, essay *EssayState) error {
 		} else {
 			r.Log.Printf("    imagerender: %s", strings.TrimSpace(string(output)))
 		}
-
-		swapCmd := exec.Command("imageswap", "--slug", essay.Slug, "--images", filepath.Join(ps.BaseDir, "images"), outFile)
-		if output, err := swapCmd.CombinedOutput(); err != nil {
-			r.Log.Printf("    WARNING: imageswap %s: %v %s", essay.Slug, err, string(output))
-		}
 	}
 
 	r.Log.Printf("    exported → %s", exportName)
@@ -632,6 +634,25 @@ func (r *Runner) exportEssay(ps *PipelineState, essay *EssayState) error {
 	result := &APIResult{}
 	r.markComplete(ps, essay, StageExport, "local", result)
 	return nil
+}
+
+func (r *Runner) swapImages(ps *PipelineState, essay *EssayState, docxPath string) {
+	mdFile := filepath.Join(ps.BaseDir, "draft2", essay.Slug+".md")
+	if _, err := os.Stat(mdFile); os.IsNotExist(err) {
+		mdFile = filepath.Join(ps.BaseDir, "illustrate", essay.Slug+".md")
+	}
+	raw, err := os.ReadFile(mdFile)
+	if err != nil {
+		return
+	}
+	if !strings.Contains(string(raw), "[[IMG:") {
+		return
+	}
+	r.Log.Printf("  [docx] %s: imageswap starting", essay.Slug)
+	swapCmd := exec.Command("imageswap", "--slug", essay.Slug, "--images", filepath.Join(ps.BaseDir, "images"), docxPath)
+	if output, err := swapCmd.CombinedOutput(); err != nil {
+		r.Log.Printf("    WARNING: imageswap %s: %v %s", essay.Slug, err, string(output))
+	}
 }
 
 func (r *Runner) upgradeDocx(docxPath string) error {
@@ -900,6 +921,7 @@ func (r *Runner) markInProgress(ps *PipelineState, essay *EssayState, stage Stag
 	ps.WriteMeta(stage, meta)
 
 	ps.mu.Lock()
+	essay.CurrentStage = stage
 	essay.Status = "in-progress"
 	essay.Meta[stage] = meta
 	ps.mu.Unlock()
@@ -1113,4 +1135,108 @@ func (r *Runner) renderImages(ps *PipelineState, slug string) {
 			r.Log.Printf("    imagerender: %s", line)
 		}
 	}
+}
+
+func (r *Runner) allEssaysAtOrPast(ps *PipelineState, stage Stage) bool {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	if len(ps.Essays) == 0 {
+		return false
+	}
+	for _, essay := range ps.Essays {
+		if essay.CurrentStage < stage {
+			return false
+		}
+		if essay.CurrentStage == stage && essay.Status != "final" {
+			return false
+		}
+	}
+	return true
+}
+
+func (r *Runner) generateBookArtifacts(ps *PipelineState) {
+	if !r.allEssaysAtOrPast(ps, StageDraft2) {
+		return
+	}
+
+	bookDir := filepath.Join(ps.BaseDir, "book")
+
+	needBlurb := !bookDirHasFile(bookDir, "back-cover-blurb.md")
+	needCover := !bookDirHasFile(bookDir, "front-cover-prompt.md") || !bookDirHasFile(bookDir, "front-cover.png")
+
+	if !needBlurb && !needCover {
+		return
+	}
+
+	if r.Config.Pipeline.DryRun {
+		r.Log.Printf("[%s] [book] dry-run: would generate book artifacts", ps.Project)
+		return
+	}
+
+	go func() {
+		if needBlurb {
+			r.Log.Printf("[%s] [book] generating back-cover blurb...", ps.Project)
+			cmd := exec.Command("bookblurb", ps.BaseDir)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				r.Log.Printf("[%s] [book] WARNING: bookblurb: %v\n%s", ps.Project, err, string(output))
+				return
+			}
+			r.Log.Printf("[%s] [book] blurb generated", ps.Project)
+		}
+
+		if needCover {
+			r.Log.Printf("[%s] [book] generating front-cover prompt and image...", ps.Project)
+			cmd := exec.Command("bookcover", ps.BaseDir)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				r.Log.Printf("[%s] [book] WARNING: bookcover: %v\n%s", ps.Project, err, string(output))
+				return
+			}
+			r.Log.Printf("[%s] [book] cover generated", ps.Project)
+		}
+	}()
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func invalidateBookArtifacts(baseDir string) {
+	bookDir := filepath.Join(baseDir, "book")
+	for _, name := range []string{"back-cover-blurb.md", "front-cover-prompt.md", "front-cover.png"} {
+		p := filepath.Join(bookDir, name)
+		if fileExists(p) {
+			os.Remove(p)
+		}
+		entries, err := os.ReadDir(bookDir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.IsDir() {
+				sp := filepath.Join(bookDir, e.Name(), name)
+				if fileExists(sp) {
+					os.Remove(sp)
+				}
+			}
+		}
+	}
+}
+
+func bookDirHasFile(bookDir, filename string) bool {
+	if fileExists(filepath.Join(bookDir, filename)) {
+		return true
+	}
+	entries, err := os.ReadDir(bookDir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if e.IsDir() && fileExists(filepath.Join(bookDir, e.Name(), filename)) {
+			return true
+		}
+	}
+	return false
 }

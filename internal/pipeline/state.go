@@ -526,6 +526,10 @@ func (ps *PipelineState) RevertToStage(slug string, target Stage) ([]string, err
 		return nil, fmt.Errorf("essay %q not found", slug)
 	}
 
+	if essay.CurrentStage < target {
+		return nil, nil
+	}
+
 	var removed []string
 	start := int(target)
 	if target <= StageIdeas {
@@ -641,9 +645,6 @@ func (ps *PipelineState) SelectForCycle(cfg *PipelineConfig) []*EssayState {
 	}
 
 	maxActions := cfg.MaxPerCycle
-	if ps.CycleCount < maxActions {
-		maxActions = ps.CycleCount + 1
-	}
 
 	var newEssays, continuingEssays []*EssayState
 	for _, essay := range ps.Essays {
