@@ -1,18 +1,17 @@
 package main
 
 import (
-	"archive/zip"
-	"bytes"
 	"flag"
 	"fmt"
 	"image/png"
-	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/TrueBlocks/trueblocks-art/packages/docxzip"
 )
 
 func main() {
@@ -55,32 +54,24 @@ func swapImages(docxPath, imagesDir, slugOverride string) error {
 		return fmt.Errorf("no images directory for slug %q at %s", slug, slugImgDir)
 	}
 
-	reader, err := zip.OpenReader(docxPath)
+	files, err := docxzip.ReadFiles(docxPath, docxzip.DocumentXML, docxzip.RelsXML, docxzip.ContentTypesXML)
 	if err != nil {
-		return fmt.Errorf("opening docx: %w", err)
-	}
-	defer reader.Close()
-
-	docXML, err := readZipEntry(reader, "word/document.xml")
-	if err != nil {
-		return fmt.Errorf("reading document.xml: %w", err)
+		return fmt.Errorf("reading docx: %w", err)
 	}
 
-	relsXML, err := readZipEntry(reader, "word/_rels/document.xml.rels")
-	if err != nil {
-		return fmt.Errorf("reading rels: %w", err)
-	}
-
-	contentTypes, err := readZipEntry(reader, "[Content_Types].xml")
-	if err != nil {
-		return fmt.Errorf("reading content types: %w", err)
-	}
+	docXML := string(files[docxzip.DocumentXML])
+	relsXML := string(files[docxzip.RelsXML])
+	contentTypes := string(files[docxzip.ContentTypesXML])
 
 	// Collect existing media files to know what image numbers are taken
+	entries, err := docxzip.ListEntries(docxPath)
+	if err != nil {
+		return fmt.Errorf("listing entries: %w", err)
+	}
 	existingMedia := map[string]bool{}
-	for _, f := range reader.File {
-		if strings.HasPrefix(f.Name, "word/media/") {
-			existingMedia[f.Name] = true
+	for _, name := range entries {
+		if strings.HasPrefix(name, "word/media/") {
+			existingMedia[name] = true
 		}
 	}
 
@@ -168,84 +159,21 @@ func swapImages(docxPath, imagesDir, slugOverride string) error {
 			`<Default Extension="png" ContentType="image/png"/></Types>`, 1)
 	}
 
-	// Write the new zip
-	tmpPath := docxPath + ".tmp"
-	outFile, err := os.Create(tmpPath)
-	if err != nil {
-		return fmt.Errorf("creating temp file: %w", err)
+	// Build overrides map for Rewrite
+	overrides := map[string][]byte{
+		docxzip.DocumentXML:     []byte(docXML),
+		docxzip.RelsXML:         []byte(relsXML),
+		docxzip.ContentTypesXML: []byte(contentTypes),
 	}
-	defer outFile.Close()
-
-	zipWriter := zip.NewWriter(outFile)
-
-	for _, f := range reader.File {
-		switch f.Name {
-		case "word/document.xml":
-			w, err := zipWriter.Create(f.Name)
-			if err != nil {
-				return err
-			}
-			if _, err := w.Write([]byte(docXML)); err != nil {
-				return err
-			}
-		case "word/_rels/document.xml.rels":
-			w, err := zipWriter.Create(f.Name)
-			if err != nil {
-				return err
-			}
-			if _, err := w.Write([]byte(relsXML)); err != nil {
-				return err
-			}
-		case "[Content_Types].xml":
-			w, err := zipWriter.Create(f.Name)
-			if err != nil {
-				return err
-			}
-			if _, err := w.Write([]byte(contentTypes)); err != nil {
-				return err
-			}
-		default:
-			if localPath, ok := mediaFiles[f.Name]; ok {
-				imgData, err := os.ReadFile(localPath)
-				if err != nil {
-					return fmt.Errorf("reading %s: %w", localPath, err)
-				}
-				w, err := zipWriter.Create(f.Name)
-				if err != nil {
-					return err
-				}
-				if _, err := w.Write(imgData); err != nil {
-					return err
-				}
-				delete(mediaFiles, f.Name)
-			} else {
-				if err := copyZipEntry(zipWriter, f); err != nil {
-					return err
-				}
-			}
-		}
-	}
-
-	// Add any new media files not already in the zip
 	for zipPath, localPath := range mediaFiles {
 		imgData, err := os.ReadFile(localPath)
 		if err != nil {
 			return fmt.Errorf("reading %s: %w", localPath, err)
 		}
-		w, err := zipWriter.Create(zipPath)
-		if err != nil {
-			return err
-		}
-		if _, err := w.Write(imgData); err != nil {
-			return err
-		}
+		overrides[zipPath] = imgData
 	}
 
-	zipWriter.Close()
-	outFile.Close()
-	reader.Close()
-
-	return os.Rename(tmpPath, docxPath)
+	return docxzip.Rewrite(docxPath, docxPath, overrides)
 }
 
 // normalizeTagParagraph converts any tag paragraph to ImageTag style with vanish
@@ -470,40 +398,3 @@ func findMaxImageNum(existing map[string]bool) int {
 	return max
 }
 
-func readZipEntry(reader *zip.ReadCloser, name string) (string, error) {
-	for _, f := range reader.File {
-		if f.Name == name {
-			rc, err := f.Open()
-			if err != nil {
-				return "", err
-			}
-			defer rc.Close()
-			data, err := io.ReadAll(rc)
-			if err != nil {
-				return "", err
-			}
-			return string(data), nil
-		}
-	}
-	return "", fmt.Errorf("entry %q not found", name)
-}
-
-func copyZipEntry(w *zip.Writer, f *zip.File) error {
-	rc, err := f.Open()
-	if err != nil {
-		return err
-	}
-	defer rc.Close()
-
-	data, err := io.ReadAll(rc)
-	if err != nil {
-		return err
-	}
-
-	writer, err := w.Create(f.Name)
-	if err != nil {
-		return err
-	}
-	_, err = io.Copy(writer, bytes.NewReader(data))
-	return err
-}
