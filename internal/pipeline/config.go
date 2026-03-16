@@ -6,20 +6,30 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
-	API       APIConfig       `yaml:"api"`
-	Models    ModelsConfig    `yaml:"models"`
-	Pipeline  PipelineConfig  `yaml:"pipeline"`
-	Dashboard DashboardConfig `yaml:"dashboard"`
+	API        APIConfig                `yaml:"api"`
+	Models     ModelsConfig             `yaml:"models"`
+	Pricing    map[string]*ModelPricing `yaml:"pricing"`
+	Pipeline   PipelineConfig           `yaml:"pipeline"`
+	Dashboard  DashboardConfig          `yaml:"dashboard"`
+	ExportYear string                   `yaml:"export_year"`
 }
 
 type APIConfig struct {
 	AnthropicKey string `yaml:"anthropic_key"`
 	OpenAIKey    string `yaml:"openai_key"`
+	Version      string `yaml:"version"`
+	MaxTokens    int    `yaml:"max_tokens"`
+}
+
+type ModelPricing struct {
+	InputPer1M  float64 `yaml:"input_per_1m"`
+	OutputPer1M float64 `yaml:"output_per_1m"`
 }
 
 type ModelsConfig struct {
@@ -61,6 +71,10 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	cfg := &Config{
+		API: APIConfig{
+			Version:   "2023-06-01",
+			MaxTokens: 8192,
+		},
 		Models: ModelsConfig{
 			Research:   "claude-sonnet-4-20250514",
 			Outline:    "claude-sonnet-4-20250514",
@@ -68,6 +82,10 @@ func LoadConfig(path string) (*Config, error) {
 			Factcheck:  "claude-sonnet-4-20250514",
 			Draft2:     "claude-sonnet-4-20250514",
 			Illustrate: "claude-sonnet-4-20250514",
+		},
+		Pricing: map[string]*ModelPricing{
+			"opus":    {InputPer1M: 15.0, OutputPer1M: 75.0},
+			"default": {InputPer1M: 3.0, OutputPer1M: 15.0},
 		},
 		Pipeline: PipelineConfig{
 			MaxPerCycle:   6,
@@ -82,6 +100,7 @@ func LoadConfig(path string) (*Config, error) {
 		Dashboard: DashboardConfig{
 			Port: 8787,
 		},
+		ExportYear: time.Now().Format("2006"),
 	}
 
 	if err := yaml.Unmarshal(data, cfg); err != nil {

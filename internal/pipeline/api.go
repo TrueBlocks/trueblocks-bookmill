@@ -12,8 +12,11 @@ import (
 )
 
 type AnthropicClient struct {
-	APIKey  string
-	OnRetry func(attempt, maxAttempts int, err error, nextIn time.Duration)
+	APIKey     string
+	APIVersion string
+	MaxTokens  int
+	Pricing    map[string]*ModelPricing
+	OnRetry    func(attempt, maxAttempts int, err error, nextIn time.Duration)
 }
 
 type anthropicRequest struct {
@@ -103,9 +106,13 @@ func isRetryableError(err error) bool {
 }
 
 func (c *AnthropicClient) callOnce(ctx context.Context, model, prompt string, timeout time.Duration) (*APIResult, error) {
+	maxTokens := c.MaxTokens
+	if maxTokens == 0 {
+		maxTokens = 8192
+	}
 	reqBody := anthropicRequest{
 		Model:     model,
-		MaxTokens: 8192,
+		MaxTokens: maxTokens,
 		Messages: []message{
 			{Role: "user", Content: prompt},
 		},
@@ -126,7 +133,11 @@ func (c *AnthropicClient) callOnce(ctx context.Context, model, prompt string, ti
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-api-key", c.APIKey)
-	req.Header.Set("anthropic-version", "2023-06-01")
+	apiVersion := c.APIVersion
+	if apiVersion == "" {
+		apiVersion = "2023-06-01"
+	}
+	req.Header.Set("anthropic-version", apiVersion)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -155,7 +166,7 @@ func (c *AnthropicClient) callOnce(ctx context.Context, model, prompt string, ti
 		}
 	}
 
-	cost := estimateCost(model, apiResp.Usage.InputTokens, apiResp.Usage.OutputTokens)
+	cost := estimateCost(model, apiResp.Usage.InputTokens, apiResp.Usage.OutputTokens, c.Pricing)
 
 	return &APIResult{
 		Content:      text,
@@ -165,17 +176,22 @@ func (c *AnthropicClient) callOnce(ctx context.Context, model, prompt string, ti
 	}, nil
 }
 
-func estimateCost(model string, inputTokens, outputTokens int) float64 {
-	var inputRate, outputRate float64
-	switch {
-	case strings.Contains(model, "opus"):
-		inputRate = 15.0 / 1_000_000
-		outputRate = 75.0 / 1_000_000
-	default:
-		inputRate = 3.0 / 1_000_000
-		outputRate = 15.0 / 1_000_000
+func estimateCost(model string, inputTokens, outputTokens int, pricing map[string]*ModelPricing) float64 {
+	// Try to find a pricing entry that matches a substring of the model name.
+	var p *ModelPricing
+	for key, mp := range pricing {
+		if key != "default" && strings.Contains(model, key) {
+			p = mp
+			break
+		}
 	}
-	return float64(inputTokens)*inputRate + float64(outputTokens)*outputRate
+	if p == nil {
+		p = pricing["default"]
+	}
+	if p == nil {
+		p = &ModelPricing{InputPer1M: 3.0, OutputPer1M: 15.0}
+	}
+	return float64(inputTokens)*p.InputPer1M/1_000_000 + float64(outputTokens)*p.OutputPer1M/1_000_000
 }
 
 func DryRunResult(stage Stage, title string) *APIResult {

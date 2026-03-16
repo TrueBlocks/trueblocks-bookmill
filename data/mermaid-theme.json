@@ -22,7 +22,7 @@
     "titleColor": "#1E293B",
     "edgeLabelBackground": "#FFFFFF",
     "nodeTextColor": "#FFFFFF",
-    "actorTextColor": "#1E293B",
+    "actorTextColor": "#FFFFFF",
     "actorBkg": "#2563EB",
     "actorBorder": "#1D4ED8",
     "actorLineColor": "#64748B",
@@ -31,6 +31,12 @@
     "noteBkgColor": "#F8FAFC",
     "noteBorderColor": "#E2E8F0",
     "noteTextColor": "#1E293B",
+    "classText": "#FFFFFF",
+    "stateBkg": "#2563EB",
+    "stateTextColor": "#FFFFFF",
+    "labelBoxBkgColor": "#2563EB",
+    "labelBoxBorderColor": "#1D4ED8",
+    "labelTextColor": "#FFFFFF",
     "fontFamily": "Helvetica Neue, sans-serif",
     "fontSize": "14px"
   }

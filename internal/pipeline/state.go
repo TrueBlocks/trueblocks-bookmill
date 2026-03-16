@@ -60,6 +60,7 @@ func StageFromString(s string) Stage {
 type EssayMeta struct {
 	Slug           string  `yaml:"slug"`
 	Title          string  `yaml:"title"`
+	Subtitle       string  `yaml:"subtitle,omitempty"`
 	Type           string  `yaml:"type"`
 	Series         string  `yaml:"series,omitempty"`
 	Book           string  `yaml:"book"`
@@ -75,6 +76,8 @@ type EssayMeta struct {
 	Register       string  `yaml:"register,omitempty"`
 	Setting        string  `yaml:"setting,omitempty"`
 	MathVisibility string  `yaml:"math_visibility,omitempty"`
+	ReadMean       float64 `yaml:"read_mean,omitempty"`
+	ReadSpread     float64 `yaml:"read_spread,omitempty"`
 	Created        string  `yaml:"created"`
 	Started        string  `yaml:"started,omitempty"`
 	Completed      string  `yaml:"completed,omitempty"`
@@ -88,6 +91,7 @@ type EssayMeta struct {
 type EssayState struct {
 	Slug           string
 	Title          string
+	Subtitle       string
 	Type           string
 	Series         string
 	Book           string
@@ -101,6 +105,8 @@ type EssayState struct {
 	Register       string
 	Setting        string
 	MathVisibility string
+	ReadMean       float64
+	ReadSpread     float64
 	CurrentStage   Stage
 	Status         string
 	ErrorRetries   int
@@ -200,6 +206,7 @@ func (ps *PipelineState) LoadFromDisk() error {
 				essay = &EssayState{
 					Slug:           meta.Slug,
 					Title:          meta.Title,
+					Subtitle:       meta.Subtitle,
 					Type:           meta.Type,
 					Series:         meta.Series,
 					Book:           meta.Book,
@@ -213,6 +220,8 @@ func (ps *PipelineState) LoadFromDisk() error {
 					Register:       meta.Register,
 					Setting:        meta.Setting,
 					MathVisibility: meta.MathVisibility,
+					ReadMean:       meta.ReadMean,
+					ReadSpread:     meta.ReadSpread,
 					CurrentStage:   stage,
 					Status:         meta.Status,
 					Meta:           make(map[Stage]*EssayMeta),
@@ -221,6 +230,9 @@ func (ps *PipelineState) LoadFromDisk() error {
 			}
 
 			essay.Meta[stage] = &meta
+			if meta.Subtitle != "" {
+				essay.Subtitle = meta.Subtitle
+			}
 			if meta.Type != "" {
 				essay.Type = meta.Type
 			}
@@ -247,6 +259,12 @@ func (ps *PipelineState) LoadFromDisk() error {
 			}
 			if meta.MathVisibility != "" {
 				essay.MathVisibility = meta.MathVisibility
+			}
+			if meta.ReadMean > 0 {
+				essay.ReadMean = meta.ReadMean
+			}
+			if meta.ReadSpread > 0 {
+				essay.ReadSpread = meta.ReadSpread
 			}
 			if stage > essay.CurrentStage {
 				essay.CurrentStage = stage
@@ -616,14 +634,14 @@ func (ps *PipelineState) RevertToStage(slug string, target Stage) ([]string, err
 func exportFilenameFromParts(essay *EssayState) string {
 	switch essay.Type {
 	case "section":
-		return fmt.Sprintf("cSection - 2026 - %s.%02d.00 %s.docx",
-			essay.Book, essay.Part, essay.Title)
+		return fmt.Sprintf("cSection - %s - %s.%02d.00 %s.docx",
+			exportYear, essay.Book, essay.Part, essay.Title)
 	case "introduction":
-		return fmt.Sprintf("cChapter - 2026 - %s.00.00 %s.docx",
-			essay.Book, essay.Title)
+		return fmt.Sprintf("cChapter - %s - %s.00.00 %s.docx",
+			exportYear, essay.Book, essay.Title)
 	default:
-		return fmt.Sprintf("cChapter - 2026 - %s.%02d.%02d %s.docx",
-			essay.Book, essay.Part, essay.Order, essay.Title)
+		return fmt.Sprintf("cChapter - %s - %s.%02d.%02d %s.docx",
+			exportYear, essay.Book, essay.Part, essay.Order, essay.Title)
 	}
 }
 
