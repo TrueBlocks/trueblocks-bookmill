@@ -501,25 +501,27 @@ func (d *Dashboard) handleAccounting(w http.ResponseWriter, r *http.Request) {
 		}
 		allEntries = append(allEntries, af.Reverted...)
 
-		ps.mu.Lock()
-		for _, es := range ps.Essays {
-			for stage, meta := range es.Meta {
-				if meta.Cost == 0 {
-					continue
+		func() {
+			ps.mu.Lock()
+			defer ps.mu.Unlock()
+			for _, es := range ps.Essays {
+				for stage, meta := range es.Meta {
+					if meta.Cost == 0 {
+						continue
+					}
+					allEntries = append(allEntries, AccountingEntry{
+						Slug:      meta.Slug,
+						Stage:     stage.String(),
+						Book:      meta.Book,
+						TokensIn:  meta.Tokens,
+						TokensOut: meta.TokensOut,
+						Cost:      meta.Cost,
+						Model:     meta.Model,
+						Count:     1,
+					})
 				}
-				allEntries = append(allEntries, AccountingEntry{
-					Slug:      meta.Slug,
-					Stage:     stage.String(),
-					Book:      meta.Book,
-					TokensIn:  meta.Tokens,
-					TokensOut: meta.TokensOut,
-					Cost:      meta.Cost,
-					Model:     meta.Model,
-					Count:     1,
-				})
 			}
-		}
-		ps.mu.Unlock()
+		}()
 	}
 
 	type row struct {
@@ -711,11 +713,13 @@ func (d *Dashboard) handleRevertAll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var slugs []string
-	ps.mu.Lock()
-	for slug := range ps.Essays {
-		slugs = append(slugs, slug)
-	}
-	ps.mu.Unlock()
+	func() {
+		ps.mu.Lock()
+		defer ps.mu.Unlock()
+		for slug := range ps.Essays {
+			slugs = append(slugs, slug)
+		}
+	}()
 
 	reverted := 0
 	var errors []string
@@ -768,9 +772,11 @@ func (d *Dashboard) handleDiskStats(w http.ResponseWriter, r *http.Request) {
 
 	totalCost := 0.0
 	for _, ps := range d.Runner.Projects {
-		ps.mu.Lock()
-		totalCost += ps.TotalCost + ps.RevertedCost()
-		ps.mu.Unlock()
+		func() {
+			ps.mu.Lock()
+			defer ps.mu.Unlock()
+			totalCost += ps.TotalCost + ps.RevertedCost()
+		}()
 	}
 
 	w.Header().Set("Content-Type", "application/json")

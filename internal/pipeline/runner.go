@@ -950,10 +950,10 @@ func (r *Runner) markInProgress(ps *PipelineState, essay *EssayState, stage Stag
 	ps.WriteMeta(stage, meta)
 
 	ps.mu.Lock()
+	defer ps.mu.Unlock()
 	essay.CurrentStage = stage
 	essay.Status = "in-progress"
 	essay.Meta[stage] = meta
-	ps.mu.Unlock()
 }
 
 func (r *Runner) markComplete(ps *PipelineState, essay *EssayState, stage Stage, model string, result *APIResult) {
@@ -981,13 +981,13 @@ func (r *Runner) markComplete(ps *PipelineState, essay *EssayState, stage Stage,
 	ps.WriteMeta(stage, meta)
 
 	ps.mu.Lock()
+	defer ps.mu.Unlock()
 	essay.CurrentStage = stage
 	essay.Status = "final"
 	essay.Meta[stage] = meta
 	if stage == StageExport {
 		ps.SessionDone++
 	}
-	ps.mu.Unlock()
 }
 
 func (r *Runner) markError(ps *PipelineState, essay *EssayState, stage Stage, err error) {
@@ -1013,10 +1013,10 @@ func (r *Runner) markError(ps *PipelineState, essay *EssayState, stage Stage, er
 	ps.WriteMeta(stage, meta)
 
 	ps.mu.Lock()
+	defer ps.mu.Unlock()
 	essay.Status = "error"
 	essay.ErrorRetries++
 	essay.Meta[stage] = meta
-	ps.mu.Unlock()
 	if essay.ErrorRetries >= 3 {
 		r.Log.Printf("  %s: giving up after %d retries (revert to retry)", essay.Slug, essay.ErrorRetries)
 	}
