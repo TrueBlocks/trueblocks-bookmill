@@ -48,6 +48,7 @@ func (lb *LogBuffer) Write(p []byte) (n int, err error) {
 		level = "verbose"
 	}
 	lb.mu.Lock()
+	defer lb.mu.Unlock()
 	lb.entries = append(lb.entries, LogEntry{
 		Time:    time.Now().Format("15:04:05"),
 		Message: msg,
@@ -56,7 +57,6 @@ func (lb *LogBuffer) Write(p []byte) (n int, err error) {
 	if len(lb.entries) > lb.maxSize {
 		lb.entries = lb.entries[len(lb.entries)-lb.maxSize:]
 	}
-	lb.mu.Unlock()
 	lb.version.Add(1)
 	return
 }
