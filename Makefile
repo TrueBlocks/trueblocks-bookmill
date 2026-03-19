@@ -1,8 +1,10 @@
 INSTALL_DIR = $(HOME)/source
-BINARIES = bookblurb bookcover imagerender imageswap pipeline planbook scaffold
+BINARIES = bookgen imagerender imageswap pipeline planbook scaffold
 MSG ?= update
 
-.PHONY: build clean add commit push
+.PHONY: build clean add commit push cmds
+
+cmds: build
 
 build:
 	@for bin in $(BINARIES); do \
