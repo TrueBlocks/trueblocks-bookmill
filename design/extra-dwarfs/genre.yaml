@@ -1,0 +1,9 @@
+form: novel
+flavor: comedy
+stages:
+  - ideas
+  - outline
+  - draft
+  - continuity
+  - revision
+  - export

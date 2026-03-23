@@ -46,7 +46,7 @@ type Runner struct {
 
 func NewRunner(cfg *Config, baseDir string) *Runner {
 	r := &Runner{
-		Config:      cfg,
+		Config: cfg,
 		Client: &AnthropicClient{
 			APIKey:     cfg.API.AnthropicKey,
 			APIVersion: cfg.API.Version,
@@ -418,7 +418,7 @@ func (r *Runner) runProjectCycle(ctx context.Context, ps *PipelineState) ([]stri
 	}
 
 	for _, e := range selected {
-		if e.NextAction() == StageIllustrate {
+		if e.NextActionForGenre(ps.Genre) == StageIllustrate {
 			r.renderAllImages(ps)
 			break
 		}
@@ -446,7 +446,7 @@ func (r *Runner) runProjectCycle(ctx context.Context, ps *PipelineState) ([]stri
 	var wg sync.WaitGroup
 
 	for i, essay := range selected {
-		nextStage := essay.NextAction()
+		nextStage := essay.NextActionForGenre(ps.Genre)
 		if nextStage == StageDone {
 			continue
 		}
@@ -498,7 +498,7 @@ func (r *Runner) runDebugCycle(ctx context.Context, ps *PipelineState, essay *Es
 			return actions, ctx.Err()
 		}
 
-		nextStage := essay.NextAction()
+		nextStage := essay.NextActionForGenre(ps.Genre)
 		if nextStage == StageDone {
 			r.Log.Printf("  %s: all stages complete", essay.Slug)
 			break
@@ -591,15 +591,30 @@ func (r *Runner) processDocxSync(ps *PipelineState, essay *EssayState) error {
 	return nil
 }
 
+func (r *Runner) findExportSource(ps *PipelineState, slug string) string {
+	// Novel pipeline: revision → draft
+	// Essay pipeline: draft2 → illustrate
+	var candidates []string
+	if ps.Genre != nil && ps.Genre.IsNovel() {
+		candidates = []string{"revision", "draft"}
+	} else {
+		candidates = []string{"draft2", "illustrate"}
+	}
+	for _, stage := range candidates {
+		path := filepath.Join(ps.BaseDir, stage, slug+".md")
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	return ""
+}
+
 func (r *Runner) exportEssay(ps *PipelineState, essay *EssayState) error {
 	r.markInProgress(ps, essay, StageExport, "local")
 
-	mdFile := filepath.Join(ps.BaseDir, "draft2", essay.Slug+".md")
-	if _, err := os.Stat(mdFile); os.IsNotExist(err) {
-		mdFile = filepath.Join(ps.BaseDir, "illustrate", essay.Slug+".md")
-		if _, err := os.Stat(mdFile); os.IsNotExist(err) {
-			return fmt.Errorf("neither draft2 nor illustrate file found for %s", essay.Slug)
-		}
+	mdFile := r.findExportSource(ps, essay.Slug)
+	if mdFile == "" {
+		return fmt.Errorf("no exportable draft found for %s", essay.Slug)
 	}
 
 	raw, err := os.ReadFile(mdFile)
@@ -625,7 +640,7 @@ func (r *Runner) exportEssay(ps *PipelineState, essay *EssayState) error {
 	}
 
 	home, _ := os.UserHomeDir()
-	templatePath := filepath.Join(home, ".works", "templates", "book-template.dotm")
+	templatePath := filepath.Join(home, ".local", "share", "trueblocks", "works", "works", "templates", "book-template.dotm")
 	exportName := exportFilename(essay)
 	outFile := filepath.Join(exportDir, exportName)
 
@@ -678,7 +693,7 @@ func (r *Runner) upgradeDocx(docxPath string) error {
 	}
 
 	home, _ := os.UserHomeDir()
-	templatePath := filepath.Join(home, ".works", "templates", "book-template.dotm")
+	templatePath := filepath.Join(home, ".local", "share", "trueblocks", "works", "works", "templates", "book-template.dotm")
 
 	escaped := func(s string) string {
 		var out strings.Builder
@@ -897,6 +912,18 @@ func (r *Runner) buildPrompt(ps *PipelineState, essay *EssayState, targetStage S
 		factcheck := readContent(StageFactcheck)
 		mathVis, _ := MathVisByName(essay.MathVisibility)
 		prompt = r.illustratePrompt(series, displayTitle, draft, factcheck, essay.Slug, essay.Setting, mathVis)
+
+	case StageContinuity:
+		model = r.Config.Models.Draft
+		draft := readContent(StageDraft)
+		outline := readContent(StageOutline)
+		prompt = r.continuityPrompt(series, displayTitle, draft, outline)
+
+	case StageRevision:
+		model = r.Config.Models.Draft2
+		draft := readContent(StageDraft)
+		continuityNotes := readContent(StageContinuity)
+		prompt = r.revisionPrompt(series, displayTitle, draft, continuityNotes, targetWords)
 
 	default:
 		return "", "", fmt.Errorf("unknown target stage: %s", targetStage)

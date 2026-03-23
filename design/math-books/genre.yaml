@@ -1,0 +1,11 @@
+form: essay
+flavor: math
+stages:
+  - ideas
+  - research
+  - outline
+  - draft
+  - factcheck
+  - illustrate
+  - draft2
+  - export

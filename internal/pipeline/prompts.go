@@ -165,3 +165,22 @@ func (r *Runner) introDraft2Prompt(series, title, draftContent string) string {
 		"DraftContent": draftContent,
 	})
 }
+
+func (r *Runner) continuityPrompt(series, title, draftContent, outlineContent string) string {
+	return r.executePrompt(series, "continuity", map[string]any{
+		"Title":          title,
+		"DraftContent":   draftContent,
+		"OutlineContent": outlineContent,
+	})
+}
+
+func (r *Runner) revisionPrompt(series, title, draftContent, continuityNotes string, targetWords int) string {
+	specs := r.specsFor(series)
+	return r.executePrompt(series, "revision", map[string]any{
+		"Title":           title,
+		"TargetWords":     targetWords,
+		"DraftContent":    draftContent,
+		"ContinuityNotes": continuityNotes,
+		"VoiceProfile":    specs.VoiceProfile,
+	})
+}

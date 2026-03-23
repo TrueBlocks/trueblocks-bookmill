@@ -24,13 +24,15 @@ const (
 	StageOutline
 	StageDraft
 	StageFactcheck
+	StageContinuity
 	StageIllustrate
 	StageDraft2
+	StageRevision
 	StageExport
 	StageDone
 )
 
-var stageNames = []string{"ideas", "research", "outline", "draft", "factcheck", "illustrate", "draft2", "export"}
+var stageNames = []string{"ideas", "research", "outline", "draft", "factcheck", "continuity", "illustrate", "draft2", "revision", "export"}
 
 func (s Stage) String() string {
 	if int(s) < len(stageNames) {
@@ -114,8 +116,23 @@ type EssayState struct {
 }
 
 func (e *EssayState) NextAction() Stage {
+	return e.NextActionForGenre(nil)
+}
+
+func (e *EssayState) NextActionForGenre(g *Genre) Stage {
 	if e.Status == "error" {
 		return e.CurrentStage
+	}
+	if g != nil && len(g.Stages) > 0 {
+		currentName := e.CurrentStage.String()
+		if currentName == "ideas" && e.Status == "pending" {
+			return StageFromString(g.FirstContentStage())
+		}
+		if e.Status == "final" {
+			next := g.NextStageAfter(currentName)
+			return StageFromString(next)
+		}
+		return StageDone
 	}
 	if e.CurrentStage == StageIdeas && e.Status == "pending" {
 		return StageResearch
@@ -128,6 +145,14 @@ func (e *EssayState) NextAction() Stage {
 
 func (e *EssayState) IsDone() bool {
 	return e.CurrentStage == StageExport && e.Status == "final"
+}
+
+func (e *EssayState) IsDoneForGenre(g *Genre) bool {
+	if g == nil || len(g.Stages) == 0 {
+		return e.IsDone()
+	}
+	lastStage := g.Stages[len(g.Stages)-1]
+	return e.CurrentStage == StageFromString(lastStage) && e.Status == "final"
 }
 
 func (e *EssayState) IsAvailable() bool {
@@ -144,6 +169,7 @@ func (e *EssayState) IsAvailable() bool {
 type PipelineState struct {
 	Project     string
 	BaseDir     string
+	Genre       *Genre
 	Essays      map[string]*EssayState
 	CycleCount  int
 	TotalCost   float64
@@ -156,9 +182,11 @@ func NewPipelineState(project, baseDir string) *PipelineState {
 	for _, name := range append(stageNames, "images") {
 		os.MkdirAll(filepath.Join(baseDir, name), 0755)
 	}
+	genre, _ := LoadGenreFromProject(baseDir)
 	return &PipelineState{
 		Project: project,
 		BaseDir: baseDir,
+		Genre:   genre,
 		Essays:  make(map[string]*EssayState),
 	}
 }

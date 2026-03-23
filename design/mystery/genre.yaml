@@ -1,0 +1,10 @@
+form: novel
+flavor: mystery
+stages:
+  - ideas
+  - research
+  - outline
+  - draft
+  - continuity
+  - revision
+  - export

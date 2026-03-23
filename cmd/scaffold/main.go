@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/TrueBlocks/trueblocks-math/internal/pipeline"
 	"gopkg.in/yaml.v3"
 )
 
@@ -209,8 +210,9 @@ func toSlug(label string) string {
 }
 
 type series struct {
-	slug  string
-	plans []struct {
+	slug      string
+	designSub string
+	plans     []struct {
 		file string
 		book string
 	}
@@ -275,7 +277,7 @@ func discoverSeries(designDir string) ([]series, error) {
 		sort.Slice(plans, func(i, j int) bool {
 			return plans[i].file < plans[j].file
 		})
-		result = append(result, series{slug: slug, plans: plans})
+		result = append(result, series{slug: slug, designSub: filepath.Dir(plans[0].file), plans: plans})
 	}
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].slug < result[j].slug
@@ -299,10 +301,24 @@ func loadAllItems(designDir string, plans []struct {
 	return all, nil
 }
 
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
 func main() {
+	force := false
+	args := []string{}
+	for _, a := range os.Args[1:] {
+		if a == "--force" {
+			force = true
+		} else {
+			args = append(args, a)
+		}
+	}
 	designDir := "design"
-	if len(os.Args) > 1 {
-		designDir = os.Args[1]
+	if len(args) > 0 {
+		designDir = args[0]
 	}
 
 	allSeries, err := discoverSeries(designDir)
@@ -323,6 +339,14 @@ func main() {
 	fmt.Printf("Loaded %d attribute entries\n", len(attrs))
 
 	for _, s := range allSeries {
+		genreDir := filepath.Join(designDir, s.designSub)
+		genre, err := pipeline.LoadGenre(genreDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error loading genre for %s: %v\n", s.slug, err)
+			os.Exit(1)
+		}
+		fmt.Printf("Genre: %s/%s\n", genre.Form, genre.Flavor)
+
 		items, err := loadAllItems(designDir, s.plans)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error loading plans for %s: %v\n", s.slug, err)
@@ -353,67 +377,142 @@ func main() {
 			}
 		}
 
+		// Copy genre.yaml to project directory
+		genreSrc := filepath.Join(genreDir, "genre.yaml")
+		if _, err := os.Stat(genreSrc); err == nil {
+			data, err := os.ReadFile(genreSrc)
+			if err == nil {
+				projectGenre := filepath.Join("projects", s.slug, "genre.yaml")
+				os.WriteFile(projectGenre, data, 0644)
+			}
+		}
+
 		for _, it := range items {
 			var ideaContent string
-			switch it.Type {
-			case "section":
-				ideaContent = fmt.Sprintf("# %s\n\n"+
-					"**Slug:** %s\n"+
-					"**Type:** section\n\n"+
-					"## Part Title Page\n\n"+
-					"This is a section divider for Part %d: %s.\n\n"+
-					"## Placement\n\n"+
-					"- **Book:** %s\n"+
-					"- **Part %d:** %s\n",
-					it.Title, it.Slug, it.Part, it.PartTitle, it.Book, it.Part, it.PartTitle)
-			case "introduction":
-				ideaContent = fmt.Sprintf("# %s\n\n"+
-					"**Slug:** %s\n"+
-					"**Type:** introduction\n\n"+
-					"## Book Introduction\n\n"+
-					"%s\n\n"+
-					"## The Hidden Math\n\n"+
-					"%s\n\n"+
-					"## Placement\n\n"+
-					"- **Book:** %s\n",
-					it.Title, it.Slug, it.Hook, it.HiddenMath, it.Book)
-			default:
-				ideaContent = fmt.Sprintf("# %s\n\n"+
-					"**Slug:** %s\n"+
-					"**Type:** essay\n\n"+
-					"## The Everyday Experience\n\n"+
-					"%s\n\n"+
-					"## The Hidden Math\n\n"+
-					"%s\n\n"+
-					"## Placement\n\n"+
-					"- **Book:** %s\n"+
-					"- **Part %d:** %s\n"+
-					"- **Order:** %d\n",
-					it.Title, it.Slug, it.Hook, it.HiddenMath, it.Book, it.Part, it.PartTitle, it.Order)
+			if genre.IsNovel() {
+				switch it.Type {
+				case "introduction":
+					ideaContent = fmt.Sprintf("# %s\n\n"+
+						"**Slug:** %s\n"+
+						"**Type:** introduction\n\n"+
+						"## Scene Summary\n\n"+
+						"%s\n\n"+
+						"## Subplot\n\n"+
+						"%s\n\n"+
+						"## Placement\n\n"+
+						"- **Order:** %d\n",
+						it.Title, it.Slug, it.Hook, it.HiddenMath, it.Order)
+				case "epilogue":
+					ideaContent = fmt.Sprintf("# %s\n\n"+
+						"**Slug:** %s\n"+
+						"**Type:** epilogue\n\n"+
+						"## Scene Summary\n\n"+
+						"%s\n\n"+
+						"## Subplot\n\n"+
+						"%s\n\n"+
+						"## Placement\n\n"+
+						"- **Order:** %d\n",
+						it.Title, it.Slug, it.Hook, it.HiddenMath, it.Order)
+				default:
+					ideaContent = fmt.Sprintf("# %s\n\n"+
+						"**Slug:** %s\n"+
+						"**Type:** chapter\n\n"+
+						"## Scene Summary\n\n"+
+						"%s\n\n"+
+						"## Subplot\n\n"+
+						"%s\n\n"+
+						"## Characters Present\n\n"+
+						"(to be filled in)\n\n"+
+						"## Plot Threads\n\n"+
+						"(to be filled in)\n\n"+
+						"## Placement\n\n"+
+						"- **Order:** %d\n",
+						it.Title, it.Slug, it.Hook, it.HiddenMath, it.Order)
+				}
+			} else {
+				switch it.Type {
+				case "section":
+					ideaContent = fmt.Sprintf("# %s\n\n"+
+						"**Slug:** %s\n"+
+						"**Type:** section\n\n"+
+						"## Part Title Page\n\n"+
+						"This is a section divider for Part %d: %s.\n\n"+
+						"## Placement\n\n"+
+						"- **Book:** %s\n"+
+						"- **Part %d:** %s\n",
+						it.Title, it.Slug, it.Part, it.PartTitle, it.Book, it.Part, it.PartTitle)
+				case "introduction":
+					ideaContent = fmt.Sprintf("# %s\n\n"+
+						"**Slug:** %s\n"+
+						"**Type:** introduction\n\n"+
+						"## Book Introduction\n\n"+
+						"%s\n\n"+
+						"## The Hidden Math\n\n"+
+						"%s\n\n"+
+						"## Placement\n\n"+
+						"- **Book:** %s\n",
+						it.Title, it.Slug, it.Hook, it.HiddenMath, it.Book)
+				default:
+					ideaContent = fmt.Sprintf("# %s\n\n"+
+						"**Slug:** %s\n"+
+						"**Type:** essay\n\n"+
+						"## The Everyday Experience\n\n"+
+						"%s\n\n"+
+						"## The Hidden Math\n\n"+
+						"%s\n\n"+
+						"## Placement\n\n"+
+						"- **Book:** %s\n"+
+						"- **Part %d:** %s\n"+
+						"- **Order:** %d\n",
+						it.Title, it.Slug, it.Hook, it.HiddenMath, it.Book, it.Part, it.PartTitle, it.Order)
+				}
 			}
 
-			metaContent := fmt.Sprintf("slug: %s\n"+
-				"title: \"%s\"\n"+
-				"type: %s\n"+
-				"series: %s\n"+
-				"book: %s\n"+
-				"part: %d\n"+
-				"part_title: \"%s\"\n"+
-				"order: %d\n"+
-				"status: pending\n"+
-				"model: claude-sonnet-4-20250514\n"+
-				"arc: %s\n"+
-				"ending: %s\n"+
-				"structure: %s\n"+
-				"entry: %s\n"+
-				"register: %s\n"+
-				"setting: \"%s\"\n"+
-				"math_visibility: %s\n",
-				it.Slug, it.Title, it.Type, s.slug, it.Book, it.Part, it.PartTitle, it.Order,
-				it.Arc, it.Ending, it.Structure, it.Entry, it.Register, it.Setting, it.MathVisibility)
+			var metaContent string
+			if genre.IsNovel() {
+				metaContent = fmt.Sprintf("slug: %s\n"+
+					"title: \"%s\"\n"+
+					"type: %s\n"+
+					"series: %s\n"+
+					"order: %d\n"+
+					"status: pending\n"+
+					"model: claude-sonnet-4-20250514\n"+
+					"form: %s\n"+
+					"flavor: %s\n",
+					it.Slug, it.Title, it.Type, s.slug, it.Order,
+					genre.Form, genre.Flavor)
+			} else {
+				metaContent = fmt.Sprintf("slug: %s\n"+
+					"title: \"%s\"\n"+
+					"type: %s\n"+
+					"series: %s\n"+
+					"book: %s\n"+
+					"part: %d\n"+
+					"part_title: \"%s\"\n"+
+					"order: %d\n"+
+					"status: pending\n"+
+					"model: claude-sonnet-4-20250514\n"+
+					"arc: %s\n"+
+					"ending: %s\n"+
+					"structure: %s\n"+
+					"entry: %s\n"+
+					"register: %s\n"+
+					"setting: \"%s\"\n"+
+					"math_visibility: %s\n"+
+					"form: %s\n"+
+					"flavor: %s\n",
+					it.Slug, it.Title, it.Type, s.slug, it.Book, it.Part, it.PartTitle, it.Order,
+					it.Arc, it.Ending, it.Structure, it.Entry, it.Register, it.Setting, it.MathVisibility,
+					genre.Form, genre.Flavor)
+			}
 
 			mdPath := filepath.Join(baseDir, it.Slug+".md")
 			metaPath := filepath.Join(baseDir, it.Slug+".meta.yaml")
+
+			if !force && (fileExists(mdPath) || fileExists(metaPath)) {
+				fmt.Printf("Skipped: %s [%s] (already exists, use --force to overwrite)\n", it.Slug, it.Type)
+				continue
+			}
 
 			if err := os.WriteFile(mdPath, []byte(ideaContent), 0644); err != nil {
 				fmt.Fprintf(os.Stderr, "Error writing %s: %v\n", mdPath, err)
