@@ -160,7 +160,7 @@ func runCover() {
 		bookTitle = filepath.Base(projectDir)
 	}
 
-	blurbText := readBlurb(projectDir)
+	blurbText := bookgen.ExtractBookBlurb(readBlurb(projectDir))
 	essays := convertEssays(rawEssays)
 
 	provider := &ai.Anthropic{APIKey: cfg.API.AnthropicKey}
