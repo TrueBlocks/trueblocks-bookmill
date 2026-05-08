@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -12,39 +11,55 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/TrueBlocks/trueblocks-art/packages/cli"
 	"github.com/TrueBlocks/trueblocks-math/internal/pipeline"
 )
 
-func main() {
-	configPath := flag.String("config", pipeline.DefaultConfigPath(), "path to config.yaml")
-	dryRun := flag.Bool("dry-run", false, "override config to force dry-run mode")
-	once := flag.Bool("once", false, "run a single cycle and exit")
-	port := flag.Int("port", 0, "override dashboard port")
-	flag.Parse()
+var version = "dev"
 
-	cfg, err := pipeline.LoadConfig(*configPath)
+func main() {
+	app := cli.App{
+		Name:        "pipeline",
+		Description: "Run the math-books essay pipeline (research → outline → draft → factcheck → done) with a live dashboard.",
+		Version:     version,
+		Flags: []cli.FlagDef{
+			{Name: "config", Help: "path to config.yaml", Default: pipeline.DefaultConfigPath()},
+			{Name: "dry-run", Help: "override config to force dry-run mode", Default: false},
+			{Name: "once", Help: "run a single cycle and exit", Default: false},
+			{Name: "port", Help: "override dashboard port", Default: 0},
+		},
+		Run: run,
+	}
+	cli.Exit(app.Main())
+}
+
+func run(c *cli.Context) error {
+	configPath := c.String("config")
+	dryRun := c.Bool("dry-run")
+	once := c.Bool("once")
+	port := c.Int("port")
+
+	cfg, err := pipeline.LoadConfig(configPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("loading config: %w", err)
 	}
 
-	if *dryRun {
+	if dryRun {
 		cfg.Pipeline.DryRun = true
 	}
-	if *port > 0 {
-		cfg.Dashboard.Port = *port
+	if port > 0 {
+		cfg.Dashboard.Port = port
 	}
 
 	cwd, err := os.Getwd()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error getting working directory: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("getting working directory: %w", err)
 	}
 
 	logBuf := pipeline.NewLogBuffer(os.Stdout, 1000)
 	runner := pipeline.NewRunner(cfg, cwd)
-	runner.ConfigPath = *configPath
-	runner.CLIDryRun = *dryRun
+	runner.ConfigPath = configPath
+	runner.CLIDryRun = dryRun
 	runner.Log = log.New(logBuf, "", 0)
 
 	var dash *pipeline.Dashboard
@@ -62,13 +77,11 @@ func main() {
 	}
 
 	if err := runner.DiscoverProjects(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error discovering projects: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("discovering projects: %w", err)
 	}
 
 	if err := runner.LoadState(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading pipeline state: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("loading pipeline state: %w", err)
 	}
 
 	for _, ps := range runner.Projects {
@@ -93,7 +106,7 @@ func main() {
 		interval = 15
 	}
 
-	dash = pipeline.NewDashboard(runner, cfg.Dashboard.Port, interval, *configPath, logBuf)
+	dash = pipeline.NewDashboard(runner, cfg.Dashboard.Port, interval, configPath, logBuf)
 
 	go func() {
 		if err := dash.Start(); err != nil {
@@ -101,7 +114,7 @@ func main() {
 		}
 	}()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(c.Context)
 	defer cancel()
 
 	var cycleMu sync.Mutex
@@ -126,11 +139,13 @@ func main() {
 		dash.SetCycleFinished()
 	}
 
-	if *once && cfg.Pipeline.Debug == "" {
+	if once && cfg.Pipeline.Debug == "" {
 		runCycle()
-		return
+		return nil
 	}
 
+	// cli.SignalContext already cancels c.Context (and thus ctx) on the first
+	// SIGINT/SIGTERM. Keep a parallel handler here so a third press force-quits.
 	sigCh := make(chan os.Signal, 4)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	var sigCount int32
@@ -159,7 +174,7 @@ func main() {
 		<-ctx.Done()
 		runner.Shutdown()
 		printFinalSummary(runner)
-		return
+		return nil
 	}
 
 	runner.Log.Printf("Auto-cycling every %d seconds (step from dashboard to run immediately)", interval)
@@ -176,7 +191,7 @@ func main() {
 			ticker.Stop()
 			runner.Shutdown()
 			printFinalSummary(runner)
-			return
+			return nil
 
 		case newInterval := <-dash.IntervalChannel():
 			interval = newInterval

@@ -10,9 +10,13 @@ import (
 	"strconv"
 	"strings"
 
+	appkit "github.com/TrueBlocks/trueblocks-art/packages/appkit/v2"
+	"github.com/TrueBlocks/trueblocks-art/packages/cli"
 	"github.com/TrueBlocks/trueblocks-math/internal/pipeline"
 	"gopkg.in/yaml.v3"
 )
+
+var version = "dev"
 
 type item struct {
 	Type           string
@@ -307,34 +311,34 @@ func fileExists(path string) bool {
 }
 
 func main() {
-	force := false
-	args := []string{}
-	for _, a := range os.Args[1:] {
-		if a == "--force" {
-			force = true
-		} else {
-			args = append(args, a)
-		}
+	app := cli.App{
+		Name:        "scaffold",
+		Description: "Scaffold .md + .meta.yaml stubs in projects/<series>/ideas/ from design Plan files.",
+		Version:     version,
+		Flags: []cli.FlagDef{
+			{Name: "design-dir", Help: "design directory containing Plan files", Default: "design"},
+			{Name: "force", Help: "overwrite existing .md / .meta.yaml stubs", Default: false},
+		},
+		Run: run,
 	}
-	designDir := "design"
-	if len(args) > 0 {
-		designDir = args[0]
-	}
+	cli.Exit(app.Main())
+}
+
+func run(c *cli.Context) error {
+	designDir := c.String("design-dir")
+	force := c.Bool("force")
 
 	allSeries, err := discoverSeries(designDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error discovering plans: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("discovering plans: %w", err)
 	}
 	if len(allSeries) == 0 {
-		fmt.Fprintf(os.Stderr, "No 'Plan for ...' files found in %s/\n", designDir)
-		os.Exit(1)
+		return fmt.Errorf("no 'Plan for ...' files found in %s/", designDir)
 	}
 
 	attrs, err := loadAttributes(designDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading attributes: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("loading attributes: %w", err)
 	}
 	fmt.Printf("Loaded %d attribute entries\n", len(attrs))
 
@@ -342,21 +346,18 @@ func main() {
 		genreDir := filepath.Join(designDir, s.designSub)
 		genre, err := pipeline.LoadGenre(genreDir)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error loading genre for %s: %v\n", s.slug, err)
-			os.Exit(1)
+			return fmt.Errorf("loading genre for %s: %w", s.slug, err)
 		}
 		fmt.Printf("Genre: %s/%s\n", genre.Form, genre.Flavor)
 
 		items, err := loadAllItems(designDir, s.plans)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error loading plans for %s: %v\n", s.slug, err)
-			os.Exit(1)
+			return fmt.Errorf("loading plans for %s: %w", s.slug, err)
 		}
 
 		baseDir := filepath.Join("projects", s.slug, "ideas")
-		if err := os.MkdirAll(baseDir, 0755); err != nil {
-			fmt.Fprintf(os.Stderr, "Error creating directory: %v\n", err)
-			os.Exit(1)
+		if err := os.MkdirAll(baseDir, appkit.DirPermissions); err != nil {
+			return fmt.Errorf("creating directory: %w", err)
 		}
 
 		fmt.Printf("Series: %s (%d plan files)\n", s.slug, len(s.plans))
@@ -383,7 +384,7 @@ func main() {
 			data, err := os.ReadFile(genreSrc)
 			if err == nil {
 				projectGenre := filepath.Join("projects", s.slug, "genre.yaml")
-				os.WriteFile(projectGenre, data, 0644)
+				_ = os.WriteFile(projectGenre, data, appkit.FilePermissions)
 			}
 		}
 
@@ -514,14 +515,12 @@ func main() {
 				continue
 			}
 
-			if err := os.WriteFile(mdPath, []byte(ideaContent), 0644); err != nil {
-				fmt.Fprintf(os.Stderr, "Error writing %s: %v\n", mdPath, err)
-				os.Exit(1)
+			if err := os.WriteFile(mdPath, []byte(ideaContent), appkit.FilePermissions); err != nil {
+				return fmt.Errorf("writing %s: %w", mdPath, err)
 			}
 
-			if err := os.WriteFile(metaPath, []byte(metaContent), 0644); err != nil {
-				fmt.Fprintf(os.Stderr, "Error writing %s: %v\n", metaPath, err)
-				os.Exit(1)
+			if err := os.WriteFile(metaPath, []byte(metaContent), appkit.FilePermissions); err != nil {
+				return fmt.Errorf("writing %s: %w", metaPath, err)
 			}
 
 			fmt.Printf("Created: %s [%s] (.md + .meta.yaml)\n", it.Slug, it.Type)
@@ -545,4 +544,5 @@ func main() {
 				b, c["essay"], c["section"], c["introduction"])
 		}
 	}
+	return nil
 }
