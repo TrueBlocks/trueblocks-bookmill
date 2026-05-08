@@ -42,9 +42,9 @@ func (lb *LogBuffer) Write(p []byte) (n int, err error) {
 		msg = msg[:len(msg)-1]
 	}
 	level := "info"
-	if containsStr(msg, "ERROR") {
+	if strings.Contains(msg, "ERROR") {
 		level = "error"
-	} else if containsStr(msg, "VERBOSE") {
+	} else if strings.Contains(msg, "VERBOSE") {
 		level = "verbose"
 	}
 	lb.mu.Lock()
@@ -80,19 +80,6 @@ func (lb *LogBuffer) Entries(verbose bool) []LogEntry {
 
 func (lb *LogBuffer) Version() int64 {
 	return lb.version.Load()
-}
-
-func containsStr(s, sub string) bool {
-	return len(s) >= len(sub) && searchStr(s, sub)
-}
-
-func searchStr(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }
 
 type Dashboard struct {

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	appkit "github.com/TrueBlocks/trueblocks-art/packages/appkit/v2"
 	"github.com/TrueBlocks/trueblocks-math/internal/pipeline"
 )
 
@@ -96,11 +97,11 @@ func main() {
 
 	if *outputPath != "" {
 		dir := filepath.Dir(*outputPath)
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, appkit.DirPermissions); err != nil {
 			fmt.Fprintf(os.Stderr, "Error creating output directory: %v\n", err)
 			os.Exit(1)
 		}
-		if err := os.WriteFile(*outputPath, []byte(output), 0644); err != nil {
+		if err := os.WriteFile(*outputPath, []byte(output), appkit.FilePermissions); err != nil {
 			fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
 			os.Exit(1)
 		}

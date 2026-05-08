@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/TrueBlocks/trueblocks-art/packages/ai"
+	appkit "github.com/TrueBlocks/trueblocks-art/packages/appkit/v2"
 	"github.com/TrueBlocks/trueblocks-art/packages/bookgen"
 	"github.com/TrueBlocks/trueblocks-math/internal/bookutil"
 	"github.com/TrueBlocks/trueblocks-math/internal/pipeline"
@@ -102,11 +103,11 @@ func runBlurb() {
 	fmt.Fprintf(os.Stderr, "Tokens: %d in, %d out (cost: $%.4f)\n",
 		result.InputTokens, result.OutputTokens, result.Cost)
 
-	if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(outPath), appkit.DirPermissions); err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating output directory: %v\n", err)
 		os.Exit(1)
 	}
-	if err := os.WriteFile(outPath, []byte(result.Content+"\n"), 0644); err != nil {
+	if err := os.WriteFile(outPath, []byte(result.Content+"\n"), appkit.FilePermissions); err != nil {
 		fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
 		os.Exit(1)
 	}
@@ -192,11 +193,11 @@ func runCover() {
 	}
 
 	if needPrompt && result.DesignDoc != "" {
-		if mkErr := os.MkdirAll(bookDir, 0755); mkErr != nil {
+		if mkErr := os.MkdirAll(bookDir, appkit.DirPermissions); mkErr != nil {
 			fmt.Fprintf(os.Stderr, "Error creating directory: %v\n", mkErr)
 			os.Exit(1)
 		}
-		if wErr := os.WriteFile(promptPath, []byte(result.DesignDoc+"\n"), 0644); wErr != nil {
+		if wErr := os.WriteFile(promptPath, []byte(result.DesignDoc+"\n"), appkit.FilePermissions); wErr != nil {
 			fmt.Fprintf(os.Stderr, "Error writing prompt: %v\n", wErr)
 			os.Exit(1)
 		}
@@ -204,7 +205,7 @@ func runCover() {
 	}
 
 	if result.ImageData != nil {
-		if wErr := os.WriteFile(imagePath, result.ImageData, 0644); wErr != nil {
+		if wErr := os.WriteFile(imagePath, result.ImageData, appkit.FilePermissions); wErr != nil {
 			fmt.Fprintf(os.Stderr, "Error writing image: %v\n", wErr)
 			os.Exit(1)
 		}
