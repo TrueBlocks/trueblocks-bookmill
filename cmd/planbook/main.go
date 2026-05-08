@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,105 +9,118 @@ import (
 	"time"
 
 	appkit "github.com/TrueBlocks/trueblocks-art/packages/appkit/v2"
+	"github.com/TrueBlocks/trueblocks-art/packages/cli"
 	"github.com/TrueBlocks/trueblocks-math/internal/pipeline"
 )
 
+// version is injected via -ldflags at build time.
+var version = "dev"
+
 func main() {
-	originsDir := flag.String("origins", "", "path to the origins folder (required)")
-	examplePlan := flag.String("example", "", "path to an existing Plan file to use as format reference")
-	outputPath := flag.String("output", "", "output file path (default: stdout)")
-	bookTitle := flag.String("title", "", "working title for the book")
-	dryRun := flag.Bool("dry-run", false, "print the prompt without calling the API")
-	model := flag.String("model", "claude-sonnet-4-20250514", "Anthropic model to use")
-	configPath := flag.String("config", pipeline.DefaultConfigPath(), "path to config.yaml for API key")
-	flag.Parse()
-
-	if *originsDir == "" {
-		fmt.Fprintln(os.Stderr, "Error: --origins is required")
-		flag.Usage()
-		os.Exit(1)
+	app := cli.App{
+		Name:        "planbook",
+		Description: "Generate a structured book Plan from origin material via the Anthropic API.",
+		Version:     version,
+		Flags: []cli.FlagDef{
+			{Name: "origins", Help: "path to the origins folder", Required: true},
+			{Name: "example", Help: "path to an existing Plan file to use as format reference"},
+			{Name: "output", Help: "output file path (default: stdout)"},
+			{Name: "title", Help: "working title for the book"},
+			{Name: "dry-run", Help: "print the prompt without calling the API", Default: false},
+			{Name: "model", Help: "Anthropic model to use", Default: "claude-sonnet-4-20250514"},
+			{Name: "config", Help: "path to config.yaml for API key", Default: pipeline.DefaultConfigPath()},
+		},
+		Run: run,
 	}
+	cli.Exit(app.Main())
+}
 
-	designDir := filepath.Dir(filepath.Clean(*originsDir))
+func run(c *cli.Context) error {
+	originsDir := c.MustString("origins")
+	examplePlan := c.String("example")
+	outputPath := c.String("output")
+	bookTitle := c.String("title")
+	dryRun := c.Bool("dry-run")
+	model := c.String("model")
+	configPath := c.String("config")
+
+	designDir := filepath.Dir(filepath.Clean(originsDir))
 	genre, err := pipeline.LoadGenre(designDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading genre: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("loading genre: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "Genre: %s/%s\n", genre.Form, genre.Flavor)
+	c.Logger.Info("loaded genre", "form", genre.Form, "flavor", genre.Flavor)
 
-	origins, err := readOrigins(*originsDir)
+	origins, err := readOrigins(originsDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading origins: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("reading origins: %w", err)
 	}
 	if len(origins) == 0 {
-		fmt.Fprintf(os.Stderr, "No files found in %s\n", *originsDir)
-		os.Exit(1)
+		return fmt.Errorf("no files found in %s", originsDir)
 	}
 
 	var example string
-	if *examplePlan != "" {
-		data, err := os.ReadFile(*examplePlan)
+	if examplePlan != "" {
+		data, err := os.ReadFile(examplePlan)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading example plan: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("reading example plan: %w", err)
 		}
 		example = string(data)
 	}
 
-	if *outputPath != "" {
-		if _, err := os.Stat(*outputPath); err == nil {
-			fmt.Fprintf(os.Stderr, "Warning: overwriting existing %s\n", *outputPath)
+	if outputPath != "" {
+		if _, err := os.Stat(outputPath); err == nil {
+			c.Logger.Warn("overwriting existing output file", "path", outputPath)
 		}
 	}
 
-	prompt := buildPrompt(origins, example, *bookTitle, genre)
+	prompt := buildPrompt(origins, example, bookTitle, genre)
 
-	if *dryRun {
+	if dryRun {
 		fmt.Println(prompt)
-		return
+		return nil
 	}
 
-	cfg, err := pipeline.LoadConfig(*configPath)
+	cfg, err := pipeline.LoadConfig(configPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("loading config: %w", err)
 	}
 	if cfg.API.AnthropicKey == "" {
-		fmt.Fprintln(os.Stderr, "Error: no anthropic_key in config")
-		os.Exit(1)
+		return fmt.Errorf("no anthropic_key in config")
 	}
 
 	client := &pipeline.AnthropicClient{APIKey: cfg.API.AnthropicKey}
 
-	fmt.Fprintln(os.Stderr, "Calling API...")
-	ctx := context.Background()
-	result, err := client.Call(ctx, *model, prompt, 5*time.Minute)
+	c.Logger.Info("calling API", "model", model)
+	callCtx, cancel := context.WithTimeout(c.Context, 5*time.Minute)
+	defer cancel()
+	result, err := client.Call(callCtx, model, prompt, 5*time.Minute)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "API error: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("API: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "Tokens: %d in, %d out (cost: $%.4f)\n",
-		result.InputTokens, result.OutputTokens, result.Cost)
+	c.Logger.Info("api result",
+		"input_tokens", result.InputTokens,
+		"output_tokens", result.OutputTokens,
+		"cost_usd", result.Cost,
+	)
 
 	output := result.Content
 
-	if *outputPath != "" {
-		dir := filepath.Dir(*outputPath)
+	if outputPath != "" {
+		dir := filepath.Dir(outputPath)
 		if err := os.MkdirAll(dir, appkit.DirPermissions); err != nil {
-			fmt.Fprintf(os.Stderr, "Error creating output directory: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("creating output directory: %w", err)
 		}
-		if err := os.WriteFile(*outputPath, []byte(output), appkit.FilePermissions); err != nil {
-			fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
-			os.Exit(1)
+		if err := os.WriteFile(outputPath, []byte(output), appkit.FilePermissions); err != nil {
+			return fmt.Errorf("writing output: %w", err)
 		}
-		fmt.Fprintf(os.Stderr, "Written to %s\n", *outputPath)
-	} else {
-		fmt.Println(output)
+		c.Logger.Info("wrote output", "path", outputPath)
+		return nil
 	}
+
+	fmt.Println(output)
+	return nil
 }
 
 type originFile struct {
