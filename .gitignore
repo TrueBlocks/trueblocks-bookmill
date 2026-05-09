@@ -1,11 +1,11 @@
-bookblurb
-bookcover
-imageswap
-pipeline
+/bookblurb
+/bookcover
+/imageswap
+/pipeline
 *.pdf
 *.mermaid
-scaffold
-imagerender
+/scaffold
+/imagerender
 .DS_Store
 bin/
 projects/*/research/
