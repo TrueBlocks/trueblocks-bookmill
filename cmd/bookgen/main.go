@@ -1,8 +1,6 @@
 package main
 
 import (
-	"context"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,149 +9,145 @@ import (
 	"github.com/TrueBlocks/trueblocks-art/packages/ai"
 	appkit "github.com/TrueBlocks/trueblocks-art/packages/appkit/v2"
 	"github.com/TrueBlocks/trueblocks-art/packages/bookgen"
+	"github.com/TrueBlocks/trueblocks-art/packages/cli"
 	"github.com/TrueBlocks/trueblocks-math/internal/bookutil"
 	"github.com/TrueBlocks/trueblocks-math/internal/pipeline"
 	"github.com/TrueBlocks/trueblocks-math/internal/types"
 )
 
+var version = "dev"
+
 func main() {
-	if len(os.Args) < 2 {
-		printUsage()
-		os.Exit(1)
+	app := cli.App{
+		Name:        "bookgen",
+		Description: "Generate book artifacts (back-cover blurb, front-cover image) from a project's draft2 essays.",
+		Version:     version,
+		Subcommands: []*cli.App{
+			{
+				Name:        "blurb",
+				Description: "Generate back-cover blurb",
+				ArgsUsage:   "<project-dir>",
+				MinArgs:     1,
+				Flags: []cli.FlagDef{
+					{Name: "config", Help: "path to config.yaml", Default: pipeline.DefaultConfigPath()},
+					{Name: "model", Help: "Anthropic model", Default: "claude-sonnet-4-20250514"},
+					{Name: "dry-run", Help: "print prompt without calling API", Default: false},
+					{Name: "force", Help: "regenerate even if blurb exists", Default: false},
+				},
+				Run: runBlurb,
+			},
+			{
+				Name:        "cover",
+				Description: "Generate front-cover prompt + image",
+				ArgsUsage:   "<project-dir>",
+				MinArgs:     1,
+				Flags: []cli.FlagDef{
+					{Name: "config", Help: "path to config.yaml", Default: pipeline.DefaultConfigPath()},
+					{Name: "model", Help: "Anthropic model", Default: "claude-sonnet-4-20250514"},
+					{Name: "dry-run", Help: "print prompt without calling API", Default: false},
+					{Name: "prompt-only", Help: "generate cover prompt, skip image", Default: false},
+					{Name: "force", Help: "regenerate even if artifacts exist", Default: false},
+					{Name: "title", Help: "book title (extracted from Plan if not specified)"},
+					{Name: "author", Help: "author name", Default: "Claude Jay Rush"},
+				},
+				Run: runCover,
+			},
+		},
 	}
-
-	cmd := os.Args[1]
-	os.Args = append(os.Args[:1], os.Args[2:]...)
-
-	switch cmd {
-	case "blurb":
-		runBlurb()
-	case "cover":
-		runCover()
-	default:
-		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", cmd)
-		printUsage()
-		os.Exit(1)
-	}
+	cli.Exit(app.Main())
 }
 
-func printUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: bookgen <command> [flags] <project-dir>")
-	fmt.Fprintln(os.Stderr, "Commands:")
-	fmt.Fprintln(os.Stderr, "  blurb   Generate back-cover blurb")
-	fmt.Fprintln(os.Stderr, "  cover   Generate front-cover image")
-}
-
-func runBlurb() {
-	fs := flag.NewFlagSet("blurb", flag.ExitOnError)
-	configPath := fs.String("config", pipeline.DefaultConfigPath(), "path to config.yaml")
-	model := fs.String("model", "claude-sonnet-4-20250514", "Anthropic model")
-	dryRun := fs.Bool("dry-run", false, "print prompt without calling API")
-	force := fs.Bool("force", false, "regenerate even if blurb exists")
-	fs.Parse(os.Args[1:])
-
-	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: bookgen blurb [flags] <project-dir>")
-		os.Exit(1)
-	}
-	projectDir := fs.Arg(0)
+func runBlurb(c *cli.Context) error {
+	configPath := c.String("config")
+	model := c.String("model")
+	dryRun := c.Bool("dry-run")
+	force := c.Bool("force")
+	projectDir := c.Args[0]
 
 	outPath := filepath.Join(projectDir, "book", "back-cover-blurb.md")
-	if !*force {
+	if !force {
 		if _, err := os.Stat(outPath); err == nil {
-			fmt.Fprintln(os.Stderr, "blurb already exists:", outPath)
-			fmt.Fprintln(os.Stderr, "use --force to regenerate")
-			os.Exit(0)
+			c.Logger.Info("blurb already exists, use --force to regenerate", "path", outPath)
+			return nil
 		}
 	}
 
-	provider, err := loadProvider(*configPath, *dryRun)
+	provider, err := loadProvider(configPath, dryRun)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	planText := bookutil.FindPlan(projectDir)
 	rawEssays := bookutil.ReadDraft2(projectDir, 0)
 	if len(rawEssays) == 0 {
-		fmt.Fprintln(os.Stderr, "no draft2 essays found in", projectDir)
-		os.Exit(1)
+		return fmt.Errorf("no draft2 essays found in %s", projectDir)
 	}
 
 	essays := convertEssays(rawEssays)
 
-	ctx := context.Background()
-	fmt.Fprintln(os.Stderr, "Generating back-cover blurb...")
-	result, err := bookgen.GenerateBlurb(ctx, provider, bookgen.BlurbInput{
+	c.Logger.Info("generating back-cover blurb")
+	result, err := bookgen.GenerateBlurb(c.Context, provider, bookgen.BlurbInput{
 		Plan:   planText,
 		Essays: essays,
-		Model:  *model,
-		DryRun: *dryRun,
+		Model:  model,
+		DryRun: dryRun,
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
-	if *dryRun {
+	if dryRun {
 		fmt.Println(result.Content)
-		return
+		return nil
 	}
 
-	fmt.Fprintf(os.Stderr, "Tokens: %d in, %d out (cost: $%.4f)\n",
-		result.InputTokens, result.OutputTokens, result.Cost)
+	c.Logger.Info("api result",
+		"input_tokens", result.InputTokens,
+		"output_tokens", result.OutputTokens,
+		"cost_usd", result.Cost,
+	)
 
 	if err := os.MkdirAll(filepath.Dir(outPath), appkit.DirPermissions); err != nil {
-		fmt.Fprintf(os.Stderr, "Error creating output directory: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("creating output directory: %w", err)
 	}
 	if err := os.WriteFile(outPath, []byte(result.Content+"\n"), appkit.FilePermissions); err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("writing output: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "Written to %s\n", outPath)
+	c.Logger.Info("wrote blurb", "path", outPath)
+	return nil
 }
 
-func runCover() {
-	fs := flag.NewFlagSet("cover", flag.ExitOnError)
-	configPath := fs.String("config", pipeline.DefaultConfigPath(), "path to config.yaml")
-	model := fs.String("model", "claude-sonnet-4-20250514", "Anthropic model")
-	dryRun := fs.Bool("dry-run", false, "print prompt without calling API")
-	promptOnly := fs.Bool("prompt-only", false, "generate cover prompt, skip image")
-	force := fs.Bool("force", false, "regenerate even if artifacts exist")
-	title := fs.String("title", "", "book title (extracted from Plan if not specified)")
-	author := fs.String("author", "Claude Jay Rush", "author name")
-	fs.Parse(os.Args[1:])
-
-	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "Usage: bookgen cover [flags] <project-dir>")
-		os.Exit(1)
-	}
-	projectDir := fs.Arg(0)
+func runCover(c *cli.Context) error {
+	configPath := c.String("config")
+	model := c.String("model")
+	dryRun := c.Bool("dry-run")
+	promptOnly := c.Bool("prompt-only")
+	force := c.Bool("force")
+	title := c.String("title")
+	author := c.String("author")
+	projectDir := c.Args[0]
 
 	bookDir := filepath.Join(projectDir, "book")
 	promptPath := filepath.Join(bookDir, "front-cover-prompt.md")
 	imagePath := filepath.Join(bookDir, "front-cover.png")
 
-	needPrompt := *force || !fileExists(promptPath)
-	needImage := *force || !fileExists(imagePath)
+	needPrompt := force || !fileExists(promptPath)
+	needImage := force || !fileExists(imagePath)
 
 	if !needPrompt && !needImage {
-		fmt.Fprintln(os.Stderr, "cover artifacts already exist:", bookDir)
-		fmt.Fprintln(os.Stderr, "use --force to regenerate")
-		os.Exit(0)
+		c.Logger.Info("cover artifacts already exist, use --force to regenerate", "dir", bookDir)
+		return nil
 	}
 
-	cfg, err := pipeline.LoadConfig(*configPath)
+	cfg, err := pipeline.LoadConfig(configPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("loading config: %w", err)
 	}
 
 	planText := bookutil.FindPlan(projectDir)
 	rawEssays := bookutil.ReadDraft2(projectDir, 500)
 
-	bookTitle := *title
+	bookTitle := title
 	if bookTitle == "" {
 		bookTitle = extractTitleFromPlan(planText)
 	}
@@ -167,54 +161,50 @@ func runCover() {
 	provider := &ai.Anthropic{APIKey: cfg.API.AnthropicKey}
 
 	var imgProvider ai.ImageProvider
-	if !*promptOnly && !*dryRun {
+	if !promptOnly && !dryRun {
 		imgProvider = &ai.DallE{APIKey: cfg.API.OpenAIKey}
 	}
 
-	fmt.Fprintln(os.Stderr, "Generating front cover...")
-	ctx := context.Background()
-	result, err := bookgen.GenerateCover(ctx, provider, imgProvider, bookgen.CoverInput{
+	c.Logger.Info("generating front cover")
+	result, err := bookgen.GenerateCover(c.Context, provider, imgProvider, bookgen.CoverInput{
 		Title:  bookTitle,
-		Author: *author,
+		Author: author,
 		Plan:   planText,
 		Blurb:  blurbText,
 		Essays: essays,
-		Model:  *model,
-		DryRun: *dryRun,
+		Model:  model,
+		DryRun: dryRun,
 	})
 	if err != nil && result == nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
-	if *dryRun {
+	if dryRun {
 		fmt.Println(result.DesignDoc)
-		return
+		return nil
 	}
 
 	if needPrompt && result.DesignDoc != "" {
 		if mkErr := os.MkdirAll(bookDir, appkit.DirPermissions); mkErr != nil {
-			fmt.Fprintf(os.Stderr, "Error creating directory: %v\n", mkErr)
-			os.Exit(1)
+			return fmt.Errorf("creating directory: %w", mkErr)
 		}
 		if wErr := os.WriteFile(promptPath, []byte(result.DesignDoc+"\n"), appkit.FilePermissions); wErr != nil {
-			fmt.Fprintf(os.Stderr, "Error writing prompt: %v\n", wErr)
-			os.Exit(1)
+			return fmt.Errorf("writing prompt: %w", wErr)
 		}
-		fmt.Fprintf(os.Stderr, "Cover prompt written to %s\n", promptPath)
+		c.Logger.Info("wrote cover prompt", "path", promptPath)
 	}
 
 	if result.ImageData != nil {
 		if wErr := os.WriteFile(imagePath, result.ImageData, appkit.FilePermissions); wErr != nil {
-			fmt.Fprintf(os.Stderr, "Error writing image: %v\n", wErr)
-			os.Exit(1)
+			return fmt.Errorf("writing image: %w", wErr)
 		}
-		fmt.Fprintf(os.Stderr, "Cover image written to %s\n", imagePath)
+		c.Logger.Info("wrote cover image", "path", imagePath)
 	}
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
+		c.Logger.Warn("partial cover result", "error", err)
 	}
+	return nil
 }
 
 func loadProvider(configPath string, dryRun bool) (ai.Provider, error) {
