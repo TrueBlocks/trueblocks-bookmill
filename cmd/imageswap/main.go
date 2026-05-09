@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"flag"
 	"fmt"
 	"image"
 	"image/png"
@@ -13,40 +12,60 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/TrueBlocks/trueblocks-art/packages/cli"
 	"github.com/TrueBlocks/trueblocks-art/packages/docxzip"
 )
 
+var version = "dev"
+
 func main() {
-	imagesDir := flag.String("images", "", "path to images directory (contains slug subdirs)")
-	slugFlag := flag.String("slug", "", "override slug (default: derived from docx filename)")
-	dryRun := flag.Bool("dry-run", false, "report what would change without modifying files")
-	cropBorders := flag.String("crop-borders", "", "crop red borders from all PNGs in this directory (no docx needed)")
-	flag.Parse()
+	app := cli.App{
+		Name:        "imageswap",
+		Description: "Swap [[IMG:...]] / [[R:...]] tag lines in .docx files with corresponding PNGs from an images directory.",
+		Version:     version,
+		ArgsUsage:   "<file.docx> [file.docx ...]",
+		Flags: []cli.FlagDef{
+			{Name: "images", Help: "path to images directory (contains slug subdirs); default: <cwd>/projects/math-books/images"},
+			{Name: "slug", Help: "override slug (default: derived from docx filename)"},
+			{Name: "dry-run", Help: "report what would change without modifying files", Default: false},
+			{Name: "crop-borders", Help: "crop red borders from all PNGs in this directory (no docx needed)"},
+		},
+		Run: run,
+	}
+	cli.Exit(app.Main())
+}
 
-	if *cropBorders != "" {
-		cropRedBordersInDir(*cropBorders, *dryRun)
-		return
+func run(c *cli.Context) error {
+	imagesDir := c.String("images")
+	slugFlag := c.String("slug")
+	dryRun := c.Bool("dry-run")
+	cropBorders := c.String("crop-borders")
+
+	if cropBorders != "" {
+		cropRedBordersInDir(cropBorders, dryRun)
+		return nil
 	}
 
-	if flag.NArg() < 1 {
-		log.Fatalf("Usage: imageswap [--images DIR] <file.docx> [file2.docx ...]")
+	if len(c.Args) < 1 {
+		return cli.NewUsageError(fmt.Errorf("at least one .docx file required (or use --crop-borders DIR)"))
 	}
 
-	if *imagesDir == "" {
+	if imagesDir == "" {
 		cwd, err := os.Getwd()
 		if err != nil {
-			log.Fatalf("getting cwd: %v", err)
+			return fmt.Errorf("getting cwd: %w", err)
 		}
-		*imagesDir = filepath.Join(cwd, "projects", "math-books", "images")
+		imagesDir = filepath.Join(cwd, "projects", "math-books", "images")
 	}
 
-	for _, docxPath := range flag.Args() {
-		if err := swapImages(docxPath, *imagesDir, *slugFlag, *dryRun); err != nil {
+	for _, docxPath := range c.Args {
+		if err := swapImages(docxPath, imagesDir, slugFlag, dryRun); err != nil {
 			log.Printf("ERROR %s: %v", docxPath, err)
 		} else {
 			log.Printf("OK %s", docxPath)
 		}
 	}
+	return nil
 }
 
 func cropRedBordersInDir(dir string, dryRun bool) {
