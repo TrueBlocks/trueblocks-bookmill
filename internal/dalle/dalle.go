@@ -2,6 +2,7 @@ package dalle
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,7 +22,8 @@ type Response struct {
 }
 
 type ImageData struct {
-	URL string `json:"url"`
+	URL     string `json:"url"`
+	B64JSON string `json:"b64_json"`
 }
 
 func GenerateImage(apiKey, prompt, model, size, quality string) ([]byte, error) {
@@ -43,7 +45,7 @@ func GenerateImage(apiKey, prompt, model, size, quality string) ([]byte, error) 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	client := &http.Client{Timeout: 120 * time.Second}
+	client := &http.Client{Timeout: 180 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("API call: %w", err)
@@ -67,13 +69,22 @@ func GenerateImage(apiKey, prompt, model, size, quality string) ([]byte, error) 
 		return nil, fmt.Errorf("no images returned")
 	}
 
-	imageURL := dalleResp.Data[0].URL
-	if imageURL == "" {
-		return nil, fmt.Errorf("empty image URL in response")
+	imgEntry := dalleResp.Data[0]
+
+	if imgEntry.B64JSON != "" {
+		imgData, err := base64.StdEncoding.DecodeString(imgEntry.B64JSON)
+		if err != nil {
+			return nil, fmt.Errorf("decoding base64 image: %w", err)
+		}
+		return imgData, nil
+	}
+
+	if imgEntry.URL == "" {
+		return nil, fmt.Errorf("no image URL or base64 data in response")
 	}
 
 	imgClient := &http.Client{Timeout: 60 * time.Second}
-	imgResp, err := imgClient.Get(imageURL)
+	imgResp, err := imgClient.Get(imgEntry.URL)
 	if err != nil {
 		return nil, fmt.Errorf("downloading image: %w", err)
 	}

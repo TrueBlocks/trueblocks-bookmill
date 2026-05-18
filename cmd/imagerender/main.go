@@ -266,7 +266,7 @@ func renderAI(srcPath, outPath, apiKey string) error {
 	}
 	prompt := strings.TrimSpace(string(promptData))
 
-	imgData, err := dalle.GenerateImage(apiKey, prompt, "dall-e-3", "1792x1024", "")
+	imgData, err := dalle.GenerateImage(apiKey, prompt, "gpt-image-1", "1536x1024", "")
 	if err != nil {
 		return err
 	}
