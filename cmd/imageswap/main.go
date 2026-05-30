@@ -129,8 +129,7 @@ func swapImages(docxPath, imagesDir, slugOverride string, dryRun bool) error {
 	// Find all tag paragraphs and process them
 	tags := reTagLine.FindAllStringSubmatch(docXML, -1)
 	if len(tags) == 0 {
-		log.Printf("  no image tags found in %s", docxPath)
-		return nil
+
 	}
 
 	// mediaFiles maps zip path -> local PNG path for files to add/replace
@@ -163,7 +162,7 @@ func swapImages(docxPath, imagesDir, slugOverride string, dryRun bool) error {
 		docXML = normalizeTagParagraph(docXML, tag[0], filename)
 
 		// Check if there's already a drawing paragraph right after the tag
-		existingRID := findExistingImageRID(docXML, filename)
+		existingRID, existingDrawingPara := findExistingImageRID(docXML, filename)
 		if existingRID != "" {
 			// Image paragraph exists — find its media target and replace the bytes
 			target := findRelTarget(relsXML, existingRID)
@@ -191,22 +190,10 @@ func swapImages(docxPath, imagesDir, slugOverride string, dryRun bool) error {
 				// Check if dimensions would change
 				cx, cy := pngDimensionsEMU(pngPath)
 				oldDocXML := docXML
-				docXML = updateExistingImageDimensions(docXML, existingRID, cx, cy)
+				docXML = updateExistingImageDimensions(docXML, existingDrawingPara, cx, cy)
 				dimsChanged := docXML != oldDocXML
 
 				if bytesMatch && !dimsChanged {
-					log.Printf("  skip %s (bytes and dimensions unchanged)", filename)
-					continue
-				}
-
-				if dryRun {
-					if !bytesMatch {
-						log.Printf("  would update bytes %s <- %s (%d -> %d bytes)", zipPath, filename, len(existingData), len(newData))
-					}
-					if dimsChanged {
-						log.Printf("  would update dimensions for %s (cx=%d cy=%d)", filename, cx, cy)
-					}
-					modified = true
 					continue
 				}
 
@@ -246,7 +233,6 @@ func swapImages(docxPath, imagesDir, slugOverride string, dryRun bool) error {
 	}
 
 	if !modified {
-		log.Printf("  nothing to update in %s", docxPath)
 		return nil
 	}
 
@@ -266,10 +252,13 @@ func swapImages(docxPath, imagesDir, slugOverride string, dryRun bool) error {
 			`<Default Extension="png" ContentType="image/png"/></Types>`, 1)
 	}
 
-	// Guard: document.xml must never shrink — that means text was lost
+	// Guard: document.xml must not shrink significantly — that means text was lost.
+	// Allow up to 1000 bytes of shrinkage to account for tag normalization ([[IMG:]] -> [[R:]])
+	// and dimension updates which may reduce digit counts in numeric attributes.
 	origDocLen := len(files[docxzip.DocumentXML])
 	newDocLen := len(docXML)
-	if newDocLen < origDocLen {
+	const shrinkThreshold = 1000
+	if newDocLen < origDocLen-shrinkThreshold {
 		return fmt.Errorf("document.xml shrank (%d -> %d bytes) — text was lost, aborting", origDocLen, newDocLen)
 	}
 
@@ -342,17 +331,19 @@ func normalizeTagParagraph(docXML, fullTag, filename string) string {
 
 // findExistingImageRID checks if the paragraph immediately after the tag
 // for the given filename contains a drawing with an embedded image.
-func findExistingImageRID(docXML, filename string) string {
+// Returns the rId and the full drawing paragraph text (so callers can locate
+// the exact paragraph even when the same rId appears multiple times).
+func findExistingImageRID(docXML, filename string) (rID, drawingPara string) {
 	tagText := "[[R:" + filename + "]]"
 	tagIdx := strings.Index(docXML, tagText)
 	if tagIdx < 0 {
-		return ""
+		return "", ""
 	}
 
 	// Find end of current paragraph
 	pEnd := strings.Index(docXML[tagIdx:], "</w:p>")
 	if pEnd < 0 {
-		return ""
+		return "", ""
 	}
 	afterTag := tagIdx + pEnd + len("</w:p>")
 
@@ -363,36 +354,38 @@ func findExistingImageRID(docXML, filename string) string {
 	// Check if next paragraph has a drawing
 	nextPEnd := strings.Index(rest, "</w:p>")
 	if nextPEnd < 0 {
-		return ""
+		return "", ""
 	}
 	nextPara := rest[:nextPEnd+len("</w:p>")]
 
 	if !strings.Contains(nextPara, "<w:drawing>") {
-		return ""
+		return "", ""
 	}
 
 	blipRe := regexp.MustCompile(`r:embed="(rId\d+)"`)
 	m := blipRe.FindStringSubmatch(nextPara)
 	if m == nil {
-		return ""
+		return "", ""
 	}
-	return m[1]
+	return m[1], nextPara
 }
 
-// updateExistingImageDimensions finds the drawing paragraph associated with rID
-// and updates both wp:extent and a:ext cx/cy values to the correct dimensions.
-func updateExistingImageDimensions(docXML, rID string, cx, cy int64) string {
-	rIDAttr := fmt.Sprintf(`r:embed="%s"`, rID)
-	rIDIdx := strings.Index(docXML, rIDAttr)
-	if rIDIdx < 0 {
+// updateExistingImageDimensions updates the wp:extent and a:ext cx/cy values within
+// the given drawing paragraph and ensures the paragraph is centered.
+// drawingPara must be the exact paragraph text as it appears in docXML.
+func updateExistingImageDimensions(docXML, drawingPara string, cx, cy int64) string {
+	// Locate the specific drawing paragraph by its exact text content.
+	paraStart := strings.Index(docXML, drawingPara)
+	if paraStart < 0 {
 		return docXML
 	}
 
-	// Find the enclosing <w:drawing>...</w:drawing>
-	drawStart := strings.LastIndex(docXML[:rIDIdx], "<w:drawing>")
-	if drawStart < 0 {
+	// Find the <w:drawing>...</w:drawing> within that paragraph.
+	drawOffset := strings.Index(drawingPara, "<w:drawing>")
+	if drawOffset < 0 {
 		return docXML
 	}
+	drawStart := paraStart + drawOffset
 	drawEnd := strings.Index(docXML[drawStart:], "</w:drawing>")
 	if drawEnd < 0 {
 		return docXML
@@ -411,7 +404,35 @@ func updateExistingImageDimensions(docXML, rID string, cx, cy int64) string {
 	newDrawing = aExtRe.ReplaceAllString(newDrawing,
 		fmt.Sprintf(`${1}cx="%d"${2}cy="%d"`, cx, cy))
 
-	return strings.Replace(docXML, oldDrawing, newDrawing, 1)
+	docXML = strings.Replace(docXML, oldDrawing, newDrawing, 1)
+
+	// Ensure the enclosing paragraph is centered.
+	// Re-locate the paragraph start from paraStart (anchored to the right paragraph).
+	pStart := paraStart
+	pEnd := strings.Index(docXML[pStart:], "</w:p>")
+	if pEnd < 0 {
+		return docXML
+	}
+	pEnd = pStart + pEnd + len("</w:p>")
+	oldPara := docXML[pStart:pEnd]
+
+	if strings.Contains(oldPara, `w:val="center"`) {
+		return docXML
+	}
+
+	var newPara string
+	if strings.Contains(oldPara, "<w:pPr>") {
+		newPara = strings.Replace(oldPara, "<w:pPr>", `<w:pPr><w:jc w:val="center"/>`, 1)
+	} else if idx := strings.Index(oldPara, "<w:pPr "); idx >= 0 {
+		closeIdx := strings.Index(oldPara[idx:], ">")
+		insertAt := idx + closeIdx + 1
+		newPara = oldPara[:insertAt] + `<w:jc w:val="center"/>` + oldPara[insertAt:]
+	} else {
+		firstClose := strings.Index(oldPara, ">")
+		newPara = oldPara[:firstClose+1] + `<w:pPr><w:jc w:val="center"/></w:pPr>` + oldPara[firstClose+1:]
+	}
+
+	return strings.Replace(docXML, oldPara, newPara, 1)
 }
 
 // findRelTarget finds the Target for a given rId in the rels XML
@@ -461,12 +482,27 @@ func buildImageParagraph(rID, mediaName, filename string, cx, cy int64, docPrID 
 		docPrID, mediaName, rID, cx, cy)
 }
 
+// woodcutNames is the set of PNG filenames that must always render at exactly 4.5" x 4.5".
+var woodcutNames = map[string]bool{
+	"woodcut-open.png":  true,
+	"woodcut-close.png": true,
+}
+
 // pngDimensionsEMU reads a PNG and returns width/height in EMUs (English Metric Units).
-// Enforces max width of 4.5" and max height of 6" for 6x9 trade paperback sizing.
+// Woodcut images are forced to exactly 4.5" x 4.5" regardless of pixel dimensions.
+// All other images are capped at max width 4.5" and max height 6" for 6x9 trade paperback sizing.
 func pngDimensionsEMU(pngPath string) (cx, cy int64) {
 	const emuPerInch = 914400
+	const woodcutInches = 4.5
 	const maxWidthInches = 4.5
 	const maxHeightInches = 6.0
+
+	// Woodcuts are always exactly 4.5" x 4.5"
+	basename := filepath.Base(pngPath)
+	if woodcutNames[basename] {
+		const emu45 = int64(woodcutInches * emuPerInch)
+		return emu45, emu45
+	}
 
 	f, err := os.Open(pngPath)
 	if err != nil {

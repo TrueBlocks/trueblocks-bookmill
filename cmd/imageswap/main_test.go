@@ -273,7 +273,7 @@ func TestFindExistingImageRID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := findExistingImageRID(tt.docXML, tt.file)
+			got, _ := findExistingImageRID(tt.docXML, tt.file)
 			if got != tt.wantRID {
 				t.Errorf("findExistingImageRID() = %q, want %q", got, tt.wantRID)
 			}
@@ -418,7 +418,7 @@ func TestPngDimensionsEMU(t *testing.T) {
 		path := createTestPNG(t, 3000, 300)
 		cx, cy := pngDimensionsEMU(path)
 		// After scaling: 4.5" wide, 0.45" tall
-		wantCX := int64(float64(emuPerInch) * 4.5) // 4114800
+		wantCX := int64(float64(emuPerInch) * 4.5)  // 4114800
 		wantCY := int64(float64(emuPerInch) * 0.45) // 411480
 		if cx != wantCX || cy != wantCY {
 			t.Errorf("got (%d, %d), want (%d, %d)", cx, cy, wantCX, wantCY)
@@ -478,4 +478,3 @@ func TestUpdateExistingImageDimensions(t *testing.T) {
 		}
 	})
 }
-
