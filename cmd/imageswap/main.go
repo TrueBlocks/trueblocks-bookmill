@@ -276,7 +276,11 @@ func swapImages(docxPath, imagesDir, slugOverride string, dryRun bool) error {
 		overrides[zipPath] = imgData
 	}
 
-	bakPath := docxPath + ".bak"
+	backupDir := filepath.Join(os.Getenv("HOME"), ".local", "share", "trueblocks-backups")
+	if err := os.MkdirAll(backupDir, 0755); err != nil {
+		return fmt.Errorf("creating backup dir: %w", err)
+	}
+	bakPath := filepath.Join(backupDir, filepath.Base(docxPath)+".bak")
 	srcData, err := os.ReadFile(docxPath)
 	if err != nil {
 		return fmt.Errorf("reading docx for backup: %w", err)
