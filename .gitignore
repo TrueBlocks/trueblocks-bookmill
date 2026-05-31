@@ -1,6 +1,5 @@
 /bookblurb
 /bookcover
-/imageswap
 /pipeline
 *.pdf
 *.mermaid

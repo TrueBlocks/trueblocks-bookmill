@@ -1,5 +1,5 @@
 INSTALL_DIR = $(HOME)/source
-BINARIES = bookgen imagerender imageswap pipeline planbook scaffold
+BINARIES = bookgen imagerender pipeline planbook scaffold
 MSG ?= update
 
 .PHONY: build clean clobber add commit push cmds
