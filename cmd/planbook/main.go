@@ -10,7 +10,7 @@ import (
 
 	appkit "github.com/TrueBlocks/trueblocks-art/packages/appkit/v2"
 	"github.com/TrueBlocks/trueblocks-art/packages/cli"
-	"github.com/TrueBlocks/trueblocks-math/internal/pipeline"
+	"github.com/TrueBlocks/trueblocks-bookmill/internal/pipeline"
 )
 
 // version is injected via -ldflags at build time.

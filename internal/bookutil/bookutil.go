@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/TrueBlocks/trueblocks-math/internal/types"
+	"github.com/TrueBlocks/trueblocks-bookmill/internal/types"
 	"gopkg.in/yaml.v3"
 )
 

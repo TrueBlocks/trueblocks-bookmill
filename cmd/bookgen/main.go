@@ -10,9 +10,9 @@ import (
 	appkit "github.com/TrueBlocks/trueblocks-art/packages/appkit/v2"
 	"github.com/TrueBlocks/trueblocks-art/packages/bookgen"
 	"github.com/TrueBlocks/trueblocks-art/packages/cli"
-	"github.com/TrueBlocks/trueblocks-math/internal/bookutil"
-	"github.com/TrueBlocks/trueblocks-math/internal/pipeline"
-	"github.com/TrueBlocks/trueblocks-math/internal/types"
+	"github.com/TrueBlocks/trueblocks-bookmill/internal/bookutil"
+	"github.com/TrueBlocks/trueblocks-bookmill/internal/pipeline"
+	"github.com/TrueBlocks/trueblocks-bookmill/internal/types"
 )
 
 var version = "dev"

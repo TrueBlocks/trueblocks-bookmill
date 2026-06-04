@@ -1,4 +1,4 @@
-module github.com/TrueBlocks/trueblocks-math
+module github.com/TrueBlocks/trueblocks-bookmill
 
 go 1.25.1
 

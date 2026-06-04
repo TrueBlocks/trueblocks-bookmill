@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/TrueBlocks/trueblocks-art/packages/cli"
-	"github.com/TrueBlocks/trueblocks-math/internal/pipeline"
+	"github.com/TrueBlocks/trueblocks-bookmill/internal/pipeline"
 )
 
 var version = "dev"

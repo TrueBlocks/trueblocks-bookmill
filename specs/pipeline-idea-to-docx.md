@@ -323,7 +323,7 @@ The Anthropic API client handles transient failures:
 ```
 math/
 ├── Makefile                      # Builds pipeline, imagerender, imageswap
-├── go.mod                        # Module: github.com/TrueBlocks/trueblocks-math
+├── go.mod                        # Module: github.com/TrueBlocks/trueblocks-bookmill
 ├── cmd/
 │   ├── pipeline/main.go          # Main orchestrator binary
 │   ├── scaffold/main.go          # Scaffolding for essays, sections, and introductions
