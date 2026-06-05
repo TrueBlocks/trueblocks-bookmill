@@ -85,9 +85,9 @@ func run(c *cli.Context) error {
 	}
 
 	cmd := exec.Command(md2docxPath,
-		"--input", absInput,
-		"--output", docxPath,
-		"--template", templatePath,
+		templatePath,
+		absInput,
+		docxPath,
 	)
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout

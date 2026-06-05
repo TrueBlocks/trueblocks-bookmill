@@ -300,7 +300,7 @@ func findColoredBoxes(img *image.NRGBA, threshold int, isMatch func(color.Color,
 
 				for _, d := range []image.Point{{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {1, -1}, {-1, 1}, {1, 1}} {
 					nx, ny := p.X+d.X, p.Y+d.Y
-					nlx, nly := ny-bounds.Min.Y, nx-bounds.Min.X
+					nlx, nly := nx-bounds.Min.X, ny-bounds.Min.Y
 					if nx < bounds.Min.X || nx >= bounds.Max.X || ny < bounds.Min.Y || ny >= bounds.Max.Y {
 						continue
 					}

@@ -99,6 +99,28 @@ func run(c *cli.Context) error {
 	text := string(content)
 	pages := splitByPageMarkers(text)
 
+	textPageSet := make(map[int]bool)
+	for _, page := range pages {
+		textPageSet[page.pageNum] = true
+	}
+
+	orphanAfter := make(map[int][]ImageEntry)
+	for imgPage, imgs := range imagesByPage {
+		if textPageSet[imgPage] {
+			continue
+		}
+		bestPage := 0
+		for _, page := range pages {
+			if page.pageNum < imgPage && page.pageNum > bestPage {
+				bestPage = page.pageNum
+			}
+		}
+		if bestPage == 0 && len(pages) > 0 {
+			bestPage = pages[0].pageNum
+		}
+		orphanAfter[bestPage] = append(orphanAfter[bestPage], imgs...)
+	}
+
 	var sb strings.Builder
 	for _, page := range pages {
 		if keepMarkers {
@@ -109,6 +131,14 @@ func run(c *cli.Context) error {
 		sb.WriteString("\n")
 
 		if imgs, ok := imagesByPage[page.pageNum]; ok {
+			for _, img := range imgs {
+				imgPath := filepath.Join(imageDir, img.File)
+				caption := fmt.Sprintf("Page %d", img.Page)
+				sb.WriteString(fmt.Sprintf("\n[[IMG:%s|%s]]\n", imgPath, caption))
+			}
+		}
+
+		if imgs, ok := orphanAfter[page.pageNum]; ok {
 			for _, img := range imgs {
 				imgPath := filepath.Join(imageDir, img.File)
 				caption := fmt.Sprintf("Page %d", img.Page)
