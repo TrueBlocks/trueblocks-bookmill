@@ -237,6 +237,7 @@ func isCoherentText(text string) bool {
 }
 
 func searchInternetArchive(title, author string) string {
+	_ = author
 	query := sanitizeSearchTerm(title)
 	searchURL := fmt.Sprintf(
 		"https://archive.org/advancedsearch.php?q=title:(%s)+AND+mediatype:(texts)&fl[]=identifier,title&rows=5&output=json",

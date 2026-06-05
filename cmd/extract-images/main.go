@@ -24,6 +24,7 @@ type ImageEntry struct {
 	Width   int    `yaml:"width"`
 	Height  int    `yaml:"height"`
 	HadBlue bool   `yaml:"had_blue,omitempty"`
+	Rotated bool   `yaml:"rotated,omitempty"`
 }
 
 type Manifest struct {
@@ -120,6 +121,14 @@ func run(c *cli.Context) error {
 				}
 			}
 
+			rotated := false
+			if hasGreenCircle(cropped) {
+				fmt.Fprintf(os.Stderr, "  green circle detected, rotating 90° CCW\n")
+				eraseGreenPixels(cropped)
+				cropped = rotateCCW(cropped)
+				rotated = true
+			}
+
 			filename := fmt.Sprintf("p%03d-%d.png", page, seq+1)
 			outPath := filepath.Join(outputDir, filename)
 			if err := savePNG(cropped, outPath); err != nil {
@@ -135,6 +144,7 @@ func run(c *cli.Context) error {
 				Width:   bounds.Dx(),
 				Height:  bounds.Dy(),
 				HadBlue: hadBlue,
+				Rotated: rotated,
 			})
 
 			_ = slug
@@ -429,4 +439,47 @@ func savePNG(img *image.NRGBA, path string) error {
 	}
 	defer f.Close()
 	return png.Encode(f, img)
+}
+
+func isGreenPixel(c color.Color, threshold int) bool {
+	r, g, b, _ := c.RGBA()
+	r8, g8, b8 := r>>8, g>>8, b>>8
+	return int(g8) > threshold && int(r8) < 100 && int(b8) < 100
+}
+
+func hasGreenCircle(img *image.NRGBA) bool {
+	bounds := img.Bounds()
+	count := 0
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			if isGreenPixel(img.At(x, y), 150) {
+				count++
+			}
+		}
+	}
+	return count > 200
+}
+
+func eraseGreenPixels(img *image.NRGBA) {
+	white := color.NRGBA{255, 255, 255, 255}
+	bounds := img.Bounds()
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			if isGreenPixel(img.At(x, y), 150) {
+				img.Set(x, y, white)
+			}
+		}
+	}
+}
+
+func rotateCCW(img *image.NRGBA) *image.NRGBA {
+	bounds := img.Bounds()
+	w, h := bounds.Dx(), bounds.Dy()
+	rotated := image.NewNRGBA(image.Rect(0, 0, h, w))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			rotated.Set(y, w-1-x, img.At(bounds.Min.X+x, bounds.Min.Y+y))
+		}
+	}
+	return rotated
 }
