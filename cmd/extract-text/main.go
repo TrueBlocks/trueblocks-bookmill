@@ -1,0 +1,343 @@
+package main
+
+import (
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strings"
+
+	"github.com/TrueBlocks/trueblocks-art/packages/cli"
+)
+
+var version = "dev"
+
+func main() {
+	app := cli.App{
+		Name:        "extract-text",
+		Description: "Extract text from a historical PDF into markdown with page markers. Uses pdftotext for PDFs with embedded text, or downloads from Internet Archive as fallback.",
+		Version:     version,
+		Flags: []cli.FlagDef{
+			{Name: "pdf", Help: "path to the source PDF file", Default: ""},
+			{Name: "output", Help: "output markdown file path (default: stdout)", Default: ""},
+			{Name: "source", Help: "text source: pdf, archive, or auto (default: auto)", Default: "auto"},
+			{Name: "archive-id", Help: "Internet Archive identifier (e.g. asylvancityorqu00campgoog)", Default: ""},
+			{Name: "min-chars", Help: "minimum characters for a page to be kept (default: 40)", Default: 40},
+		},
+		Run: run,
+	}
+	cli.Exit(app.Main())
+}
+
+func run(c *cli.Context) error {
+	pdfPath := c.String("pdf")
+	outputPath := c.String("output")
+	source := c.String("source")
+	archiveID := c.String("archive-id")
+	minChars := c.Int("min-chars")
+
+	if pdfPath == "" {
+		return fmt.Errorf("--pdf is required")
+	}
+
+	absPDF, err := filepath.Abs(pdfPath)
+	if err != nil {
+		return fmt.Errorf("resolving pdf path: %w", err)
+	}
+	if _, err := os.Stat(absPDF); err != nil {
+		return fmt.Errorf("pdf not found: %s", absPDF)
+	}
+
+	var rawText string
+
+	switch source {
+	case "pdf":
+		rawText, err = extractFromPDF(absPDF)
+	case "archive":
+		if archiveID == "" {
+			return fmt.Errorf("--archive-id is required when --source=archive")
+		}
+		rawText, err = extractFromArchive(archiveID)
+	case "auto":
+		rawText, err = extractAuto(absPDF, archiveID)
+	default:
+		return fmt.Errorf("unknown source: %s (use pdf, archive, or auto)", source)
+	}
+	if err != nil {
+		return err
+	}
+
+	markdown := convertToMarkdown(rawText, source != "pdf" && source != "auto", minChars)
+
+	if outputPath != "" {
+		dir := filepath.Dir(outputPath)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("creating output directory: %w", err)
+		}
+		if err := os.WriteFile(outputPath, []byte(markdown), 0644); err != nil {
+			return fmt.Errorf("writing output: %w", err)
+		}
+		pages := strings.Count(markdown, "<!-- page ")
+		fmt.Fprintf(os.Stderr, "Wrote %d pages to %s\n", pages, outputPath)
+	} else {
+		fmt.Print(markdown)
+	}
+
+	return nil
+}
+
+func extractFromPDF(pdfPath string) (string, error) {
+	fmt.Fprintf(os.Stderr, "Extracting text from PDF: %s\n", filepath.Base(pdfPath))
+	cmd := exec.Command("pdftotext", "-layout", pdfPath, "-")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("pdftotext failed: %w", err)
+	}
+	return string(out), nil
+}
+
+func extractFromArchive(archiveID string) (string, error) {
+	textURL := fmt.Sprintf("https://archive.org/download/%s/%s_djvu.txt", archiveID, archiveID)
+	fmt.Fprintf(os.Stderr, "Downloading text from Internet Archive: %s\n", textURL)
+
+	resp, err := http.Get(textURL)
+	if err != nil {
+		return "", fmt.Errorf("downloading from archive: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("archive returned status %d for %s", resp.StatusCode, textURL)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("reading archive response: %w", err)
+	}
+
+	return string(body), nil
+}
+
+func extractAuto(pdfPath, archiveID string) (string, error) {
+	quality := checkTextQuality(pdfPath)
+	fmt.Fprintf(os.Stderr, "PDF text quality: %s\n", quality)
+
+	if quality == "high" || quality == "medium" {
+		return extractFromPDF(pdfPath)
+	}
+
+	if archiveID != "" {
+		fmt.Fprintf(os.Stderr, "PDF text quality is %s, trying Internet Archive...\n", quality)
+		text, err := extractFromArchive(archiveID)
+		if err == nil && len(strings.TrimSpace(text)) > 100 {
+			return text, nil
+		}
+		fmt.Fprintf(os.Stderr, "Archive text not usable, falling back to PDF\n")
+	}
+
+	return extractFromPDF(pdfPath)
+}
+
+func checkTextQuality(pdfPath string) string {
+	pages := countPages(pdfPath)
+	if pages == 0 {
+		return "none"
+	}
+
+	samplePoints := []int{1}
+	if pages > 10 {
+		samplePoints = append(samplePoints, pages/10)
+	}
+	if pages > 4 {
+		samplePoints = append(samplePoints, pages/4)
+	}
+	if pages > 2 {
+		samplePoints = append(samplePoints, pages/2)
+	}
+	if pages > 4 {
+		samplePoints = append(samplePoints, pages*3/4)
+	}
+
+	good := 0
+	for _, p := range samplePoints {
+		cmd := exec.Command("pdftotext", "-f", fmt.Sprintf("%d", p), "-l", fmt.Sprintf("%d", p), pdfPath, "-")
+		out, err := cmd.Output()
+		if err != nil {
+			continue
+		}
+		text := strings.TrimSpace(string(out))
+		if len(text) > 50 && letterRatio(text) > 0.6 {
+			good++
+		}
+	}
+
+	ratio := float64(good) / float64(len(samplePoints))
+	if ratio >= 0.7 {
+		return "high"
+	}
+	if ratio >= 0.3 {
+		return "medium"
+	}
+	if good > 0 {
+		return "low"
+	}
+	return "none"
+}
+
+func countPages(pdfPath string) int {
+	cmd := exec.Command("pdfinfo", pdfPath)
+	out, err := cmd.Output()
+	if err != nil {
+		return 0
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.HasPrefix(line, "Pages:") {
+			var pages int
+			fmt.Sscanf(strings.TrimPrefix(line, "Pages:"), "%d", &pages)
+			return pages
+		}
+	}
+	return 0
+}
+
+func letterRatio(text string) float64 {
+	letters := 0
+	nonSpace := 0
+	for _, r := range text {
+		if r != ' ' && r != '\t' && r != '\n' && r != '\r' {
+			nonSpace++
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+				letters++
+			}
+		}
+	}
+	if nonSpace == 0 {
+		return 0
+	}
+	return float64(letters) / float64(nonSpace)
+}
+
+// reExtraSpaces matches 2+ spaces within a line
+var reExtraSpaces = regexp.MustCompile(`  +`)
+
+// reBlankRuns matches 3+ consecutive blank lines
+var reBlankRuns = regexp.MustCompile(`\n{4,}`)
+
+func convertToMarkdown(rawText string, isArchiveText bool, minChars int) string {
+	if isArchiveText {
+		return convertArchiveToMarkdown(rawText)
+	}
+	return convertPDFToMarkdown(rawText, minChars)
+}
+
+func convertPDFToMarkdown(rawText string, minChars int) string {
+	pages := strings.Split(rawText, "\f")
+
+	var sb strings.Builder
+	pageNum := 0
+
+	for _, page := range pages {
+		pageNum++
+		cleaned := cleanPage(page)
+
+		if len(strings.TrimSpace(cleaned)) < minChars {
+			continue
+		}
+
+		if sb.Len() > 0 {
+			sb.WriteString("\n\n")
+		}
+		sb.WriteString(fmt.Sprintf("<!-- page %d -->\n\n", pageNum))
+		sb.WriteString(cleaned)
+	}
+
+	sb.WriteString("\n")
+	return sb.String()
+}
+
+func convertArchiveToMarkdown(rawText string) string {
+	lines := strings.Split(rawText, "\n")
+
+	skipPrefixes := []string{
+		"Google",
+		"This  is  a  digital  copy",
+		"It  has  survived",
+		"Marks,  notations",
+		"Usage  guidelines",
+		"Google  is  proud",
+		"+  Make  non-commercial",
+		"+  Refrain",
+		"+  Maintain  attribution",
+		"+  Keep  it  legal",
+		"About  Google  Book  Search",
+		"Google's  mission",
+	}
+
+	var sb strings.Builder
+	skippingHeader := true
+	pageNum := 1
+	sb.WriteString(fmt.Sprintf("<!-- page %d -->\n\n", pageNum))
+
+	blankCount := 0
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		if skippingHeader {
+			isBoilerplate := false
+			for _, prefix := range skipPrefixes {
+				if strings.HasPrefix(trimmed, prefix) {
+					isBoilerplate = true
+					break
+				}
+			}
+			if isBoilerplate || len(trimmed) == 0 {
+				continue
+			}
+			if strings.Contains(trimmed, "http") && strings.Contains(trimmed, "google") {
+				continue
+			}
+			skippingHeader = false
+		}
+
+		cleaned := reExtraSpaces.ReplaceAllString(line, " ")
+		cleaned = strings.TrimRight(cleaned, " \t")
+
+		if len(strings.TrimSpace(cleaned)) == 0 {
+			blankCount++
+			if blankCount >= 3 {
+				pageNum++
+				sb.WriteString(fmt.Sprintf("\n\n<!-- page %d -->\n\n", pageNum))
+				blankCount = 0
+			} else {
+				sb.WriteString("\n")
+			}
+		} else {
+			blankCount = 0
+			sb.WriteString(cleaned)
+			sb.WriteString("\n")
+		}
+	}
+
+	sb.WriteString("\n")
+	return sb.String()
+}
+
+func cleanPage(page string) string {
+	lines := strings.Split(page, "\n")
+	var cleaned []string
+
+	for _, line := range lines {
+		line = reExtraSpaces.ReplaceAllString(line, " ")
+		line = strings.TrimRight(line, " \t")
+		cleaned = append(cleaned, line)
+	}
+
+	result := strings.Join(cleaned, "\n")
+	result = strings.TrimSpace(result)
+	result = reBlankRuns.ReplaceAllString(result, "\n\n")
+
+	return result
+}
