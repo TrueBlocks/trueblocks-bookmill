@@ -1,5 +1,5 @@
 INSTALL_DIR = $(HOME)/source
-BINARIES = bookgen extract-text imagerender inventory pipeline planbook scaffold
+BINARIES = bookgen check-source colorize compose export extract-images extract-text imagerender inventory pipeline planbook proof scaffold
 MSG ?= update
 
 .PHONY: build clean clobber add commit push cmds
