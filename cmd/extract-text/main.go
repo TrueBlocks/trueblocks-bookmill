@@ -325,10 +325,13 @@ func convertArchiveToMarkdown(rawText string) string {
 	return sb.String()
 }
 
+// rePageNumber matches a line that is just a page number (with possible OCR noise)
+var rePageNumber = regexp.MustCompile(`^\d[\d\s\w]{0,4}$`)
+
 func cleanPage(page string) string {
 	lines := strings.Split(page, "\n")
 
-	// First pass: collapse extra spaces and trim trailing whitespace
+	// First pass: collapse extra spaces and trim whitespace
 	var trimmed []string
 	for _, line := range lines {
 		line = reExtraSpaces.ReplaceAllString(line, " ")
@@ -337,7 +340,38 @@ func cleanPage(page string) string {
 		trimmed = append(trimmed, line)
 	}
 
-	// Second pass: group lines into paragraphs (blank line = paragraph break)
+	// Strip leading blank lines
+	for len(trimmed) > 0 && trimmed[0] == "" {
+		trimmed = trimmed[1:]
+	}
+	// Strip trailing blank lines
+	for len(trimmed) > 0 && trimmed[len(trimmed)-1] == "" {
+		trimmed = trimmed[:len(trimmed)-1]
+	}
+
+	if len(trimmed) == 0 {
+		return ""
+	}
+
+	// Detect chapter start: first line is short all-caps title,
+	// NOT preceded by a page number (running headers have page number first)
+	chapterTitle := ""
+	if isChapterStart(trimmed) {
+		chapterTitle = toTitleCase(trimmed[0])
+		trimmed = trimmed[1:]
+		// Strip any blank lines after the chapter title
+		for len(trimmed) > 0 && trimmed[0] == "" {
+			trimmed = trimmed[1:]
+		}
+	} else {
+		// Regular page: strip running headers
+		trimmed = stripHeaders(trimmed)
+	}
+
+	// Strip footers
+	trimmed = stripFooters(trimmed)
+
+	// Group lines into paragraphs (blank line = paragraph break)
 	// and rejoin hyphenated words at line boundaries
 	var paragraphs []string
 	var current []string
@@ -356,9 +390,175 @@ func cleanPage(page string) string {
 		paragraphs = append(paragraphs, joinLines(current))
 	}
 
-	result := strings.Join(paragraphs, "\n\n")
+	var sb strings.Builder
+	if chapterTitle != "" {
+		sb.WriteString("## ")
+		sb.WriteString(chapterTitle)
+		sb.WriteString("\n\n")
+	}
+	sb.WriteString(strings.Join(paragraphs, "\n\n"))
+
+	result := sb.String()
 	result = strings.TrimSpace(result)
 	return result
+}
+
+func isChapterStart(lines []string) bool {
+	if len(lines) < 3 {
+		return false
+	}
+	first := lines[0]
+	// Chapter start: first line is short, all-caps, NOT a page number
+	if rePageNumber.MatchString(first) {
+		return false
+	}
+	if len(first) < 5 || len(first) > 60 {
+		return false
+	}
+	if !isUpperCase(first) {
+		return false
+	}
+	// Must not have a trailing page number (running headers do: "A QUAKER SOLDIER. 31")
+	if hasTrailingNumber(first) {
+		return false
+	}
+	// Running headers with leading page numbers (like "40 A SYLVAN CITY") start with digits
+	if len(first) > 0 && first[0] >= '0' && first[0] <= '9' {
+		return false
+	}
+	// Filter out book-title running headers ("A SYLVAN CITY" and OCR variants)
+	lower := strings.ToLower(first)
+	if strings.Contains(lower, "sylvan") {
+		return false
+	}
+	// Filter out OCR-garbled lines with stray digits mixed in
+	digitCount := 0
+	for _, c := range first {
+		if c >= '0' && c <= '9' {
+			digitCount++
+		}
+	}
+	if digitCount > 0 {
+		return false
+	}
+	// The next non-blank line should be body text (lowercase-dominant, longish)
+	for i := 1; i < len(lines); i++ {
+		if lines[i] == "" {
+			continue
+		}
+		// If next non-blank line is a page number, this is a running header pair
+		if rePageNumber.MatchString(lines[i]) {
+			return false
+		}
+		// Body text should have lowercase letters and be reasonably long
+		if !isUpperCase(lines[i]) && len(lines[i]) > 30 {
+			return true
+		}
+		return false
+	}
+	return false
+}
+
+func toTitleCase(s string) string {
+	words := strings.Fields(strings.ToLower(s))
+	skip := map[string]bool{"a": true, "an": true, "the": true, "of": true, "in": true, "and": true, "or": true, "to": true, "for": true}
+	for i, w := range words {
+		w = strings.Trim(w, ".,;:!?\"'")
+		if i == 0 || !skip[w] {
+			runes := []rune(words[i])
+			if len(runes) > 0 {
+				runes[0] = []rune(strings.ToUpper(string(runes[0])))[0]
+				words[i] = string(runes)
+			}
+		}
+	}
+	return strings.Join(words, " ")
+}
+
+func isHeaderLine(line string) bool {
+	if line == "" {
+		return true
+	}
+	// Page numbers: "40", "91", "90o" (OCR garble)
+	if rePageNumber.MatchString(line) {
+		return true
+	}
+	// Short all-caps lines like "A SYLVAN CITY." or "A QUAKER SOLDIER."
+	if len(line) < 50 && isUpperCase(line) {
+		return true
+	}
+	// Short lines with page numbers embedded: "THE BETTERING-HO USE. - 413"
+	if len(line) < 60 && hasTrailingNumber(line) {
+		return true
+	}
+	return false
+}
+
+func isUpperCase(s string) bool {
+	letters := 0
+	upper := 0
+	for _, r := range s {
+		if r >= 'a' && r <= 'z' {
+			letters++
+		} else if r >= 'A' && r <= 'Z' {
+			letters++
+			upper++
+		}
+	}
+	if letters < 3 {
+		return false
+	}
+	return float64(upper)/float64(letters) > 0.7
+}
+
+func hasTrailingNumber(s string) bool {
+	s = strings.TrimSpace(s)
+	if len(s) == 0 {
+		return false
+	}
+	// Check if the line ends with digits (possibly after punctuation/spaces)
+	for i := len(s) - 1; i >= 0; i-- {
+		c := s[i]
+		if c >= '0' && c <= '9' {
+			return true
+		}
+		if c == ' ' || c == '.' || c == '-' {
+			continue
+		}
+		break
+	}
+	return false
+}
+
+func stripHeaders(lines []string) []string {
+	stripped := 0
+	for stripped < len(lines) && stripped < 4 {
+		if !isHeaderLine(lines[stripped]) {
+			break
+		}
+		stripped++
+	}
+	// Don't strip everything — keep at least some content
+	if stripped >= len(lines) {
+		return lines
+	}
+	return lines[stripped:]
+}
+
+func stripFooters(lines []string) []string {
+	stripped := 0
+	for stripped < len(lines) && stripped < 2 {
+		last := lines[len(lines)-1-stripped]
+		if last == "" || rePageNumber.MatchString(last) {
+			stripped++
+		} else {
+			break
+		}
+	}
+	if stripped == 0 {
+		return lines
+	}
+	return lines[:len(lines)-stripped]
 }
 
 func joinLines(lines []string) string {
