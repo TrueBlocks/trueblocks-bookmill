@@ -110,6 +110,28 @@ func run(c *cli.Context) error {
 
 		for seq, box := range redBoxes {
 			globalSeq++
+
+			rotated := false
+			expandedBox := image.Rect(box.Min.X-40, box.Min.Y-40, box.Max.X+40, box.Max.Y+40)
+			pageBounds := img.Bounds()
+			if expandedBox.Min.X < pageBounds.Min.X {
+				expandedBox.Min.X = pageBounds.Min.X
+			}
+			if expandedBox.Min.Y < pageBounds.Min.Y {
+				expandedBox.Min.Y = pageBounds.Min.Y
+			}
+			if expandedBox.Max.X > pageBounds.Max.X {
+				expandedBox.Max.X = pageBounds.Max.X
+			}
+			if expandedBox.Max.Y > pageBounds.Max.Y {
+				expandedBox.Max.Y = pageBounds.Max.Y
+			}
+			if hasGreenCircle(img, expandedBox) {
+				fmt.Fprintf(os.Stderr, "  green circle detected, will rotate 90° CCW\n")
+				eraseGreenPixels(img, expandedBox)
+				rotated = true
+			}
+
 			cropped := cropImage(img, box)
 
 			hadBlue := false
@@ -121,12 +143,8 @@ func run(c *cli.Context) error {
 				}
 			}
 
-			rotated := false
-			if hasGreenCircle(cropped) {
-				fmt.Fprintf(os.Stderr, "  green circle detected, rotating 90° CCW\n")
-				eraseGreenPixels(cropped)
+			if rotated {
 				cropped = rotateCCW(cropped)
-				rotated = true
 			}
 
 			filename := fmt.Sprintf("p%03d-%d.png", page, seq+1)
@@ -389,14 +407,8 @@ func touchesOrNear(a, b image.Rectangle, dist int) bool {
 }
 
 func cropImage(img *image.NRGBA, box image.Rectangle) *image.NRGBA {
-	margin := 3
-	crop := image.Rect(
-		box.Min.X+margin,
-		box.Min.Y+margin,
-		box.Max.X-margin,
-		box.Max.Y-margin,
-	)
 	bounds := img.Bounds()
+	crop := box
 	if crop.Min.X < bounds.Min.X {
 		crop.Min.X = bounds.Min.X
 	}
@@ -410,6 +422,8 @@ func cropImage(img *image.NRGBA, box image.Rectangle) *image.NRGBA {
 		crop.Max.Y = bounds.Max.Y
 	}
 
+	crop = trimRedEdges(img, crop)
+
 	w, h := crop.Dx(), crop.Dy()
 	result := image.NewNRGBA(image.Rect(0, 0, w, h))
 	for y := 0; y < h; y++ {
@@ -418,6 +432,80 @@ func cropImage(img *image.NRGBA, box image.Rectangle) *image.NRGBA {
 		}
 	}
 	return result
+}
+
+func trimRedEdges(img *image.NRGBA, box image.Rectangle) image.Rectangle {
+	maxTrim := 30
+	minRedPerSlice := 5
+
+	isReddish := func(c color.Color) bool {
+		r, g, b, _ := c.RGBA()
+		r8, g8, b8 := int(r>>8), int(g>>8), int(b>>8)
+		return r8 > 120 && r8 > g8+30 && r8 > b8+30
+	}
+
+	// Trim left: find the rightmost column (from the left edge) that has
+	// significant red, then crop just past it
+	lastRedCol := box.Min.X
+	for col := box.Min.X; col < box.Min.X+maxTrim && col < box.Max.X; col++ {
+		redCount := 0
+		for row := box.Min.Y; row < box.Max.Y; row++ {
+			if isReddish(img.At(col, row)) {
+				redCount++
+			}
+		}
+		if redCount >= minRedPerSlice {
+			lastRedCol = col
+		}
+	}
+	box.Min.X = lastRedCol + 1
+
+	// Trim right
+	lastRedCol = box.Max.X - 1
+	for col := box.Max.X - 1; col > box.Max.X-1-maxTrim && col > box.Min.X; col-- {
+		redCount := 0
+		for row := box.Min.Y; row < box.Max.Y; row++ {
+			if isReddish(img.At(col, row)) {
+				redCount++
+			}
+		}
+		if redCount >= minRedPerSlice {
+			lastRedCol = col
+		}
+	}
+	box.Max.X = lastRedCol
+
+	// Trim top
+	lastRedRow := box.Min.Y
+	for row := box.Min.Y; row < box.Min.Y+maxTrim && row < box.Max.Y; row++ {
+		redCount := 0
+		for col := box.Min.X; col < box.Max.X; col++ {
+			if isReddish(img.At(col, row)) {
+				redCount++
+			}
+		}
+		if redCount >= minRedPerSlice {
+			lastRedRow = row
+		}
+	}
+	box.Min.Y = lastRedRow + 1
+
+	// Trim bottom
+	lastRedRow = box.Max.Y - 1
+	for row := box.Max.Y - 1; row > box.Max.Y-1-maxTrim && row > box.Min.Y; row-- {
+		redCount := 0
+		for col := box.Min.X; col < box.Max.X; col++ {
+			if isReddish(img.At(col, row)) {
+				redCount++
+			}
+		}
+		if redCount >= minRedPerSlice {
+			lastRedRow = row
+		}
+	}
+	box.Max.Y = lastRedRow
+
+	return box
 }
 
 func eraseRegion(img *image.NRGBA, box image.Rectangle) {
@@ -441,31 +529,29 @@ func savePNG(img *image.NRGBA, path string) error {
 	return png.Encode(f, img)
 }
 
-func isGreenPixel(c color.Color, threshold int) bool {
+func isGreenPixel(c color.Color) bool {
 	r, g, b, _ := c.RGBA()
-	r8, g8, b8 := r>>8, g>>8, b>>8
-	return int(g8) > threshold && int(r8) < 100 && int(b8) < 100
+	r8, g8, b8 := int(r>>8), int(g>>8), int(b>>8)
+	return g8 > 120 && g8 > r8+20 && g8 > b8+20
 }
 
-func hasGreenCircle(img *image.NRGBA) bool {
-	bounds := img.Bounds()
+func hasGreenCircle(img *image.NRGBA, region image.Rectangle) bool {
 	count := 0
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			if isGreenPixel(img.At(x, y), 150) {
+	for y := region.Min.Y; y < region.Max.Y; y++ {
+		for x := region.Min.X; x < region.Max.X; x++ {
+			if isGreenPixel(img.At(x, y)) {
 				count++
 			}
 		}
 	}
-	return count > 200
+	return count > 50
 }
 
-func eraseGreenPixels(img *image.NRGBA) {
+func eraseGreenPixels(img *image.NRGBA, region image.Rectangle) {
 	white := color.NRGBA{255, 255, 255, 255}
-	bounds := img.Bounds()
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			if isGreenPixel(img.At(x, y), 150) {
+	for y := region.Min.Y; y < region.Max.Y; y++ {
+		for x := region.Min.X; x < region.Max.X; x++ {
+			if isGreenPixel(img.At(x, y)) {
 				img.Set(x, y, white)
 			}
 		}

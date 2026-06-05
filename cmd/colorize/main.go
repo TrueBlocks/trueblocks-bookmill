@@ -1,11 +1,22 @@
 package main
 
 import (
+	"bytes"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
+	"io"
+	"math"
+	"mime/multipart"
+	"net/http"
+	"net/textproto"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
+	"time"
 
 	"github.com/TrueBlocks/trueblocks-art/packages/cli"
 	"gopkg.in/yaml.v3"
@@ -105,6 +116,10 @@ func run(c *cli.Context) error {
 		switch tool {
 		case "copy":
 			err = copyFile(srcPath, dstPath)
+		case "sepia":
+			err = applySepia(srcPath, dstPath)
+		case "openai":
+			err = colorizeOpenAI(srcPath, dstPath)
 		case "deoldify":
 			err = runDeOldify(srcPath, dstPath)
 		case "python-script":
@@ -185,27 +200,167 @@ func runPythonScript(script, src, dst string) error {
 	return cmd.Run()
 }
 
-func slugFromBook(bookFile string) string {
-	name := strings.TrimSuffix(bookFile, filepath.Ext(bookFile))
-	parts := strings.SplitN(name, " - ", 3)
-	if len(parts) == 3 {
-		return slugify(parts[2])
-	}
-	return slugify(name)
-}
+// func slugFromBook(bookFile string) string {
+// 	name := strings.TrimSuffix(bookFile, filepath.Ext(bookFile))
+// 	parts := strings.SplitN(name, " - ", 3)
+// 	if len(parts) == 3 {
+// 		return slugify(parts[2])
+// 	}
+// 	return slugify(name)
+// }
 
-func slugify(s string) string {
-	s = strings.ToLower(s)
-	var result []byte
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') {
-			result = append(result, c)
-		} else if c == ' ' || c == '-' || c == '_' {
-			if len(result) > 0 && result[len(result)-1] != '-' {
-				result = append(result, '-')
-			}
+// func slugify(s string) string {
+// 	s = strings.ToLower(s)
+// 	var result []byte
+// 	for i := 0; i < len(s); i++ {
+// 		c := s[i]
+// 		if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') {
+// 			result = append(result, c)
+// 		} else if c == ' ' || c == '-' || c == '_' {
+// 			if len(result) > 0 && result[len(result)-1] != '-' {
+// 				result = append(result, '-')
+// 			}
+// 		}
+// 	}
+// 	return strings.Trim(string(result), "-")
+// }
+
+func applySepia(src, dst string) error {
+	f, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	img, err := png.Decode(f)
+	if err != nil {
+		return fmt.Errorf("decoding png: %w", err)
+	}
+
+	bounds := img.Bounds()
+	result := image.NewNRGBA(bounds)
+
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			r, g, b, a := img.At(x, y).RGBA()
+			r8 := float64(r >> 8)
+			g8 := float64(g >> 8)
+			b8 := float64(b >> 8)
+
+			gray := 0.299*r8 + 0.587*g8 + 0.114*b8
+
+			sr := math.Min(255, gray*1.2+40)
+			sg := math.Min(255, gray*1.05+20)
+			sb := math.Min(255, gray*0.8)
+
+			result.Set(x, y, color.NRGBA{
+				R: uint8(sr),
+				G: uint8(sg),
+				B: uint8(sb),
+				A: uint8(a >> 8),
+			})
 		}
 	}
-	return strings.Trim(string(result), "-")
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	return png.Encode(out, result)
+}
+
+func colorizeOpenAI(src, dst string) error {
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		return fmt.Errorf("OPENAI_API_KEY not set")
+	}
+
+	imgData, err := os.ReadFile(src)
+	if err != nil {
+		return fmt.Errorf("reading image: %w", err)
+	}
+
+	var body bytes.Buffer
+	w := multipart.NewWriter(&body)
+
+	_ = w.WriteField("model", "gpt-image-2")
+	_ = w.WriteField("prompt", "Colorize this black and white historical engraving with natural, realistic colors. Keep all details, lines, and textures exactly as they are. Apply subtle, period-appropriate colors as if the scene were photographed in color in the 1880s.")
+	_ = w.WriteField("size", "auto")
+	_ = w.WriteField("quality", "high")
+
+	part, err := createPNGFormFile(w, "image[]", filepath.Base(src))
+	if err != nil {
+		return fmt.Errorf("creating form file: %w", err)
+	}
+	if _, err := part.Write(imgData); err != nil {
+		return fmt.Errorf("writing image data: %w", err)
+	}
+	w.Close()
+
+	req, err := http.NewRequest("POST", "https://api.openai.com/v1/images/edits", &body)
+	if err != nil {
+		return fmt.Errorf("creating request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("reading response: %w", err)
+	}
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var result struct {
+		Data []struct {
+			B64JSON string `json:"b64_json"`
+			URL     string `json:"url"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return fmt.Errorf("parsing response: %w", err)
+	}
+
+	if len(result.Data) == 0 {
+		return fmt.Errorf("no image returned")
+	}
+
+	var imgBytes []byte
+	if result.Data[0].B64JSON != "" {
+		imgBytes, err = base64.StdEncoding.DecodeString(result.Data[0].B64JSON)
+		if err != nil {
+			return fmt.Errorf("decoding base64: %w", err)
+		}
+	} else if result.Data[0].URL != "" {
+		dlResp, err := http.Get(result.Data[0].URL)
+		if err != nil {
+			return fmt.Errorf("downloading image: %w", err)
+		}
+		defer dlResp.Body.Close()
+		imgBytes, err = io.ReadAll(dlResp.Body)
+		if err != nil {
+			return fmt.Errorf("reading downloaded image: %w", err)
+		}
+	} else {
+		return fmt.Errorf("no image data in response")
+	}
+
+	return os.WriteFile(dst, imgBytes, 0644)
+}
+
+func createPNGFormFile(w *multipart.Writer, fieldname, filename string) (io.Writer, error) {
+	h := make(textproto.MIMEHeader)
+	h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, fieldname, filename))
+	h.Set("Content-Type", "image/png")
+	return w.CreatePart(h)
 }

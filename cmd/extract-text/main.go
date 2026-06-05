@@ -224,7 +224,7 @@ func letterRatio(text string) float64 {
 var reExtraSpaces = regexp.MustCompile(`  +`)
 
 // reBlankRuns matches 3+ consecutive blank lines
-var reBlankRuns = regexp.MustCompile(`\n{4,}`)
+// var reBlankRuns = regexp.MustCompile(`\n{4,}`)
 
 func convertToMarkdown(rawText string, isArchiveText bool, minChars int) string {
 	if isArchiveText {
