@@ -327,17 +327,52 @@ func convertArchiveToMarkdown(rawText string) string {
 
 func cleanPage(page string) string {
 	lines := strings.Split(page, "\n")
-	var cleaned []string
 
+	// First pass: collapse extra spaces and trim trailing whitespace
+	var trimmed []string
 	for _, line := range lines {
 		line = reExtraSpaces.ReplaceAllString(line, " ")
 		line = strings.TrimRight(line, " \t")
-		cleaned = append(cleaned, line)
+		line = strings.TrimLeft(line, " \t")
+		trimmed = append(trimmed, line)
 	}
 
-	result := strings.Join(cleaned, "\n")
-	result = strings.TrimSpace(result)
-	result = reBlankRuns.ReplaceAllString(result, "\n\n")
+	// Second pass: group lines into paragraphs (blank line = paragraph break)
+	// and rejoin hyphenated words at line boundaries
+	var paragraphs []string
+	var current []string
 
+	for _, line := range trimmed {
+		if line == "" {
+			if len(current) > 0 {
+				paragraphs = append(paragraphs, joinLines(current))
+				current = nil
+			}
+		} else {
+			current = append(current, line)
+		}
+	}
+	if len(current) > 0 {
+		paragraphs = append(paragraphs, joinLines(current))
+	}
+
+	result := strings.Join(paragraphs, "\n\n")
+	result = strings.TrimSpace(result)
+	return result
+}
+
+func joinLines(lines []string) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	result := lines[0]
+	for i := 1; i < len(lines); i++ {
+		// Rejoin hyphenated words: "de-" + "spair" → "despair"
+		if strings.HasSuffix(result, "-") {
+			result = result[:len(result)-1] + lines[i]
+		} else {
+			result = result + " " + lines[i]
+		}
+	}
 	return result
 }
