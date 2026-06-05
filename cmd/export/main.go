@@ -25,6 +25,7 @@ func main() {
 			{Name: "output-dir", Help: "output directory for .docx file (default: works/imports/files/)", Default: ""},
 			{Name: "template", Help: "path to .dotm template", Default: ""},
 			{Name: "image-dir", Help: "directory containing colorized images for imageswap", Default: ""},
+			{Name: "slug", Help: "override imageswap slug (default: derived from docx filename)", Default: ""},
 			{Name: "book-file", Help: "original PDF filename (for naming the output)", Default: ""},
 			{Name: "skip-imageswap", Help: "skip imageswap step", Default: false},
 		},
@@ -107,10 +108,12 @@ func run(c *cli.Context) error {
 			fmt.Fprintf(os.Stderr, "Warning: imageswap not found, skipping image insertion\n")
 		} else {
 			fmt.Fprintf(os.Stderr, "Running imageswap...\n")
-			cmd := exec.Command(imageswapPath,
-				"--input", docxPath,
-				"--images", absImageDir,
-			)
+			slug := c.String("slug")
+			args := []string{"--images", absImageDir, docxPath}
+			if slug != "" {
+				args = []string{"--images", absImageDir, "--slug", slug, docxPath}
+			}
+			cmd := exec.Command(imageswapPath, args...)
 			cmd.Stderr = os.Stderr
 			cmd.Stdout = os.Stdout
 			if err := cmd.Run(); err != nil {

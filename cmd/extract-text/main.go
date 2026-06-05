@@ -236,26 +236,98 @@ func convertToMarkdown(rawText string, isArchiveText bool, minChars int) string 
 func convertPDFToMarkdown(rawText string, minChars int) string {
 	pages := strings.Split(rawText, "\f")
 
-	var sb strings.Builder
-	pageNum := 0
+	type cleanedPage struct {
+		pageNum int
+		text    string
+	}
 
-	for _, page := range pages {
-		pageNum++
-		cleaned := cleanPage(page)
+	var cleaned []cleanedPage
+	for i, page := range pages {
+		pageNum := i + 1
+		text := cleanPage(page)
+		if len(strings.TrimSpace(text)) < minChars {
+			continue
+		}
+		cleaned = append(cleaned, cleanedPage{pageNum: pageNum, text: text})
+	}
 
-		if len(strings.TrimSpace(cleaned)) < minChars {
+	// Join cross-page paragraphs: if page N ends mid-sentence and page N+1
+	// starts with continuation text (not a chapter heading), merge them
+	for i := 0; i < len(cleaned)-1; i++ {
+		cur := cleaned[i].text
+		next := cleaned[i+1].text
+
+		// Don't merge into a chapter heading
+		if strings.HasPrefix(next, "## ") {
 			continue
 		}
 
+		if endsIncompletely(cur) && startsContinuation(next) {
+			// Remove trailing newline from current, merge first paragraph of next
+			nextLines := strings.SplitN(next, "\n\n", 2)
+			firstPara := nextLines[0]
+
+			// Join with space (or rejoin hyphen)
+			if strings.HasSuffix(cur, "-") {
+				cleaned[i].text = cur[:len(cur)-1] + firstPara
+			} else {
+				cleaned[i].text = cur + " " + firstPara
+			}
+
+			// Keep the rest of next page
+			if len(nextLines) > 1 {
+				cleaned[i+1].text = nextLines[1]
+			} else {
+				cleaned[i+1].text = ""
+			}
+		}
+	}
+
+	var sb strings.Builder
+	for _, p := range cleaned {
+		text := strings.TrimSpace(p.text)
+		if len(text) == 0 {
+			continue
+		}
 		if sb.Len() > 0 {
 			sb.WriteString("\n\n")
 		}
-		sb.WriteString(fmt.Sprintf("<!-- page %d -->\n\n", pageNum))
-		sb.WriteString(cleaned)
+		sb.WriteString(fmt.Sprintf("<!-- page %d -->\n\n", p.pageNum))
+		sb.WriteString(text)
 	}
 
 	sb.WriteString("\n")
 	return sb.String()
+}
+
+func endsIncompletely(text string) bool {
+	text = strings.TrimRight(text, " \t\n")
+	if len(text) == 0 {
+		return false
+	}
+	last := text[len(text)-1]
+	// Ends with sentence-ending punctuation → complete
+	if last == '.' || last == '!' || last == '?' || last == ':' || last == '"' {
+		return false
+	}
+	return true
+}
+
+func startsContinuation(text string) bool {
+	text = strings.TrimLeft(text, " \t\n")
+	if len(text) == 0 {
+		return false
+	}
+	// Starts with lowercase letter → continuation
+	first := rune(text[0])
+	if first >= 'a' && first <= 'z' {
+		return true
+	}
+	// Starts with certain punctuation that continues a sentence
+	if first == ',' || first == ';' || first == '-' {
+		return true
+	}
+	return false
 }
 
 func convertArchiveToMarkdown(rawText string) string {
