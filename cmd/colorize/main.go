@@ -49,6 +49,7 @@ func main() {
 			{Name: "copy-to", Help: "additional directory to copy colorized images to (e.g. ~/Home/Classics/...)", Default: ""},
 			{Name: "tool", Help: "colorization tool to use: deoldify, python-script, or copy (default: copy)", Default: "copy"},
 			{Name: "script", Help: "path to custom Python colorization script (used with --tool=python-script)", Default: ""},
+			{Name: "prompt", Help: "override the default colorization prompt for OpenAI", Default: ""},
 		},
 		Run: run,
 	}
@@ -103,6 +104,7 @@ func run(c *cli.Context) error {
 
 	tool := c.String("tool")
 	scriptPath := c.String("script")
+	promptOverride := c.String("prompt")
 
 	fmt.Fprintf(os.Stderr, "Colorizing %d images using %s...\n", len(manifest.Images), tool)
 
@@ -119,7 +121,7 @@ func run(c *cli.Context) error {
 		case "sepia":
 			err = applySepia(srcPath, dstPath)
 		case "openai":
-			err = colorizeOpenAI(srcPath, dstPath)
+			err = colorizeOpenAI(srcPath, dstPath, promptOverride)
 		case "deoldify":
 			err = runDeOldify(srcPath, dstPath)
 		case "python-script":
@@ -133,9 +135,6 @@ func run(c *cli.Context) error {
 
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "  warning: colorize failed for %s: %v\n", entry.File, err)
-			if copyErr := copyFile(srcPath, dstPath); copyErr != nil {
-				fmt.Fprintf(os.Stderr, "  warning: fallback copy also failed: %v\n", copyErr)
-			}
 			continue
 		}
 
@@ -270,7 +269,7 @@ func applySepia(src, dst string) error {
 	return png.Encode(out, result)
 }
 
-func colorizeOpenAI(src, dst string) error {
+func colorizeOpenAI(src, dst string, promptOverride string) error {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		return fmt.Errorf("OPENAI_API_KEY not set")
@@ -281,11 +280,16 @@ func colorizeOpenAI(src, dst string) error {
 		return fmt.Errorf("reading image: %w", err)
 	}
 
+	prompt := "Colorize this black and white engraving with an elegant, refined color palette inspired by Impressionist painting. Soft natural light, harmonious warm and cool tones, gentle blue skies with luminous clouds, muted greens and warm ochres, subtle brick reds and cream stone. Colors should feel fresh and clean — not aged or darkened — but never garish or oversaturated. Keep all lines, details, and textures exactly as they are."
+	if promptOverride != "" {
+		prompt = promptOverride
+	}
+
 	var body bytes.Buffer
 	w := multipart.NewWriter(&body)
 
 	_ = w.WriteField("model", "gpt-image-2")
-	_ = w.WriteField("prompt", "Colorize this black and white historical engraving with natural, realistic colors. Keep all details, lines, and textures exactly as they are. Apply subtle, period-appropriate colors as if the scene were photographed in color in the 1880s.")
+	_ = w.WriteField("prompt", prompt)
 	_ = w.WriteField("size", "auto")
 	_ = w.WriteField("quality", "high")
 
@@ -305,7 +309,7 @@ func colorizeOpenAI(src, dst string) error {
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", w.FormDataContentType())
 
-	client := &http.Client{Timeout: 120 * time.Second}
+	client := &http.Client{Timeout: 300 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("API request failed: %w", err)
