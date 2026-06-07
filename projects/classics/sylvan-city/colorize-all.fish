@@ -16,6 +16,13 @@ set -l CACHE $HOME/.local/share/trueblocks/bookmill/classics/projects/sylvan-cit
 set -l SUPPORT (grep 'supporting_dir:' "$MANIFEST" | sed 's/supporting_dir: *//' | sed "s|^~|$HOME|")
 set -l IMPORTS (grep 'output_dir:' "$MANIFEST" | sed 's/output_dir: *//' | sed "s|^~|$HOME|")
 
+# Read prompt from manifest (YAML folded scalar: lines between 'prompt: >' and next top-level key)
+set -l PROMPT (python3 -c "
+import yaml, sys
+with open(sys.argv[1]) as f:
+    m = yaml.safe_load(f)
+print(m.get('prompt', ''))" "$MANIFEST")
+
 set -l skip_colorize false
 set -l list_only false
 set -l start_idx 1
@@ -86,11 +93,11 @@ else
         end
     end
 
-    colorize \
-        --input-dir "$batch_dir" \
-        --output-dir "$SUPPORT" \
-        --tool openai \
-        --workers 4
+    set -l colorize_args --input-dir "$batch_dir" --output-dir "$SUPPORT" --tool openai --workers 4
+    if test -n "$PROMPT"
+        set colorize_args $colorize_args --prompt "$PROMPT"
+    end
+    colorize $colorize_args
     or begin; echo "ERROR: colorize failed"; exit 1; end
 end
 
