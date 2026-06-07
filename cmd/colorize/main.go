@@ -16,6 +16,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/TrueBlocks/trueblocks-art/packages/cli"
@@ -31,11 +33,23 @@ type ImageEntry struct {
 	Width   int    `yaml:"width"`
 	Height  int    `yaml:"height"`
 	HadBlue bool   `yaml:"had_blue,omitempty"`
+	NoSky   bool   `yaml:"no_sky,omitempty"`
+	Rotated bool   `yaml:"rotated,omitempty"`
+}
+
+type ChapterEntry struct {
+	Page  int    `yaml:"page"`
+	Title string `yaml:"title"`
 }
 
 type Manifest struct {
-	Book   string       `yaml:"book"`
-	Images []ImageEntry `yaml:"images"`
+	Imprint       string         `yaml:"imprint,omitempty"`
+	Project       string         `yaml:"project,omitempty"`
+	Book          string         `yaml:"book"`
+	OutputDir     string         `yaml:"output_dir,omitempty"`
+	SupportingDir string         `yaml:"supporting_dir,omitempty"`
+	Images        []ImageEntry   `yaml:"images"`
+	Chapters      []ChapterEntry `yaml:"chapters,omitempty"`
 }
 
 func main() {
@@ -45,11 +59,12 @@ func main() {
 		Version:     version,
 		Flags: []cli.FlagDef{
 			{Name: "input-dir", Help: "directory containing extracted B&W images and manifest.yaml", Default: ""},
-			{Name: "output-dir", Help: "directory for colorized images (default: ./colorize/)", Default: ""},
-			{Name: "copy-to", Help: "additional directory to copy colorized images to (e.g. ~/Home/Classics/...)", Default: ""},
+			{Name: "output-dir", Help: "override output directory for colorized images", Default: ""},
+			{Name: "copy-to", Help: "additional directory to copy colorized images to", Default: ""},
 			{Name: "tool", Help: "colorization tool to use: deoldify, python-script, or copy (default: copy)", Default: "copy"},
 			{Name: "script", Help: "path to custom Python colorization script (used with --tool=python-script)", Default: ""},
 			{Name: "prompt", Help: "override the default colorization prompt for OpenAI", Default: ""},
+			{Name: "workers", Help: "number of concurrent workers for API calls (default: 4)", Default: 4},
 		},
 		Run: run,
 	}
@@ -79,6 +94,9 @@ func run(c *cli.Context) error {
 	}
 
 	outputDir := c.String("output-dir")
+	if outputDir == "" && manifest.SupportingDir != "" {
+		outputDir = expandHome(manifest.SupportingDir)
+	}
 	if outputDir == "" {
 		outputDir = "./colorize"
 	}
@@ -105,43 +123,102 @@ func run(c *cli.Context) error {
 	tool := c.String("tool")
 	scriptPath := c.String("script")
 	promptOverride := c.String("prompt")
+	workers := c.Int("workers")
+	if workers < 1 {
+		workers = 1
+	}
 
-	fmt.Fprintf(os.Stderr, "Colorizing %d images using %s...\n", len(manifest.Images), tool)
+	fmt.Fprintf(os.Stderr, "Colorizing %d images using %s (%d workers)...\n", len(manifest.Images), tool, workers)
 
-	for i, entry := range manifest.Images {
-		srcPath := filepath.Join(absInput, entry.File)
-		dstPath := filepath.Join(absOutput, entry.File)
+	if tool == "openai" && workers > 1 {
+		type result struct {
+			idx  int
+			file string
+			err  error
+		}
 
-		fmt.Fprintf(os.Stderr, "[%d/%d] %s\n", i+1, len(manifest.Images), entry.File)
+		type job struct {
+			idx   int
+			entry ImageEntry
+		}
 
-		var err error
-		switch tool {
-		case "copy":
-			err = copyFile(srcPath, dstPath)
-		case "sepia":
-			err = applySepia(srcPath, dstPath)
-		case "openai":
-			err = colorizeOpenAI(srcPath, dstPath, promptOverride)
-		case "deoldify":
-			err = runDeOldify(srcPath, dstPath)
-		case "python-script":
-			if scriptPath == "" {
-				return fmt.Errorf("--script is required when --tool=python-script")
+		jobs := make(chan job, len(manifest.Images))
+		results := make(chan result, len(manifest.Images))
+
+		var wg sync.WaitGroup
+		for w := 0; w < workers; w++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for j := range jobs {
+					srcPath := filepath.Join(absInput, j.entry.File)
+					dstPath := filepath.Join(absOutput, j.entry.File)
+					err := colorizeOpenAI(srcPath, dstPath, promptOverride, j.entry.NoSky)
+					results <- result{idx: j.idx, file: j.entry.File, err: err}
+				}
+			}()
+		}
+
+		for i, entry := range manifest.Images {
+			jobs <- job{idx: i, entry: entry}
+		}
+		close(jobs)
+
+		go func() {
+			wg.Wait()
+			close(results)
+		}()
+
+		for r := range results {
+			if r.err != nil {
+				fmt.Fprintf(os.Stderr, "[%d/%d] %s — FAILED: %v\n", r.idx+1, len(manifest.Images), r.file, r.err)
+				continue
 			}
-			err = runPythonScript(scriptPath, srcPath, dstPath)
-		default:
-			return fmt.Errorf("unknown tool: %s", tool)
+			fmt.Fprintf(os.Stderr, "[%d/%d] %s — OK\n", r.idx+1, len(manifest.Images), r.file)
+			if copyTo != "" {
+				dstPath := filepath.Join(absOutput, r.file)
+				copyDst := filepath.Join(copyTo, r.file)
+				if err := copyFile(dstPath, copyDst); err != nil {
+					fmt.Fprintf(os.Stderr, "  warning: copy to %s failed: %v\n", copyTo, err)
+				}
+			}
 		}
+	} else {
+		for i, entry := range manifest.Images {
+			srcPath := filepath.Join(absInput, entry.File)
+			dstPath := filepath.Join(absOutput, entry.File)
 
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "  warning: colorize failed for %s: %v\n", entry.File, err)
-			continue
-		}
+			fmt.Fprintf(os.Stderr, "[%d/%d] %s\n", i+1, len(manifest.Images), entry.File)
 
-		if copyTo != "" {
-			copyDst := filepath.Join(copyTo, entry.File)
-			if err := copyFile(dstPath, copyDst); err != nil {
-				fmt.Fprintf(os.Stderr, "  warning: copy to %s failed: %v\n", copyTo, err)
+			var err error
+			switch tool {
+			case "copy":
+				err = copyFile(srcPath, dstPath)
+			case "sepia":
+				err = applySepia(srcPath, dstPath)
+			case "openai":
+				err = colorizeOpenAI(srcPath, dstPath, promptOverride, entry.NoSky)
+			case "deoldify":
+				err = runDeOldify(srcPath, dstPath)
+			case "python-script":
+				if scriptPath == "" {
+					return fmt.Errorf("--script is required when --tool=python-script")
+				}
+				err = runPythonScript(scriptPath, srcPath, dstPath)
+			default:
+				return fmt.Errorf("unknown tool: %s", tool)
+			}
+
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "  warning: colorize failed for %s: %v\n", entry.File, err)
+				continue
+			}
+
+			if copyTo != "" {
+				copyDst := filepath.Join(copyTo, entry.File)
+				if err := copyFile(dstPath, copyDst); err != nil {
+					fmt.Fprintf(os.Stderr, "  warning: copy to %s failed: %v\n", copyTo, err)
+				}
 			}
 		}
 	}
@@ -269,7 +346,7 @@ func applySepia(src, dst string) error {
 	return png.Encode(out, result)
 }
 
-func colorizeOpenAI(src, dst string, promptOverride string) error {
+func colorizeOpenAI(src, dst string, promptOverride string, noSky bool) error {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		return fmt.Errorf("OPENAI_API_KEY not set")
@@ -281,6 +358,9 @@ func colorizeOpenAI(src, dst string, promptOverride string) error {
 	}
 
 	prompt := "Colorize this black and white engraving with an elegant, refined color palette inspired by Impressionist painting. Soft natural light, harmonious warm and cool tones, gentle blue skies with luminous clouds, muted greens and warm ochres, subtle brick reds and cream stone. Colors should feel fresh and clean — not aged or darkened — but never garish or oversaturated. Keep all lines, details, and textures exactly as they are."
+	if noSky {
+		prompt += " This image does not contain sky."
+	}
 	if promptOverride != "" {
 		prompt = promptOverride
 	}
@@ -367,4 +447,15 @@ func createPNGFormFile(w *multipart.Writer, fieldname, filename string) (io.Writ
 	h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, fieldname, filename))
 	h.Set("Content-Type", "image/png")
 	return w.CreatePart(h)
+}
+
+func expandHome(path string) string {
+	if strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return path
+		}
+		return filepath.Join(home, path[2:])
+	}
+	return path
 }

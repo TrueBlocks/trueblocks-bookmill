@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"github.com/TrueBlocks/trueblocks-art/packages/cli"
+	"github.com/pdfcpu/pdfcpu/pkg/api"
+	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 	"gopkg.in/yaml.v3"
 )
 
@@ -24,12 +26,23 @@ type ImageEntry struct {
 	Width   int    `yaml:"width"`
 	Height  int    `yaml:"height"`
 	HadBlue bool   `yaml:"had_blue,omitempty"`
+	NoSky   bool   `yaml:"no_sky,omitempty"`
 	Rotated bool   `yaml:"rotated,omitempty"`
 }
 
+type ChapterEntry struct {
+	Page  int    `yaml:"page"`
+	Title string `yaml:"title"`
+}
+
 type Manifest struct {
-	Book   string       `yaml:"book"`
-	Images []ImageEntry `yaml:"images"`
+	Imprint       string         `yaml:"imprint,omitempty"`
+	Project       string         `yaml:"project,omitempty"`
+	Book          string         `yaml:"book"`
+	OutputDir     string         `yaml:"output_dir,omitempty"`
+	SupportingDir string         `yaml:"supporting_dir,omitempty"`
+	Images        []ImageEntry   `yaml:"images"`
+	Chapters      []ChapterEntry `yaml:"chapters,omitempty"`
 }
 
 func main() {
@@ -40,6 +53,8 @@ func main() {
 		Flags: []cli.FlagDef{
 			{Name: "pdf", Help: "path to the annotated PDF file", Default: ""},
 			{Name: "output-dir", Help: "directory for extracted images (default: ./extract-images/)", Default: ""},
+			{Name: "manifest", Help: "path to manifest.yaml (required with --update-manifests)", Default: ""},
+			{Name: "update-manifests", Help: "scan PDF annotations and update manifest, then stop", Default: false},
 			{Name: "dpi", Help: "DPI for rendering PDF pages (default: 300)", Default: 300},
 			{Name: "start-page", Help: "start from this page (default: 1)", Default: 1},
 			{Name: "end-page", Help: "stop at this page (default: all)", Default: 0},
@@ -63,6 +78,15 @@ func run(c *cli.Context) error {
 	}
 	if _, err := os.Stat(absPDF); err != nil {
 		return fmt.Errorf("pdf not found: %s", absPDF)
+	}
+
+	if c.Bool("update-manifests") {
+		return updateManifests(c, absPDF)
+	}
+
+	pageAnnots, err := readPDFAnnotations(absPDF)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not read PDF annotations: %v (falling back to no annotations)\n", err)
 	}
 
 	outputDir := c.String("output-dir")
@@ -111,25 +135,9 @@ func run(c *cli.Context) error {
 		for seq, box := range redBoxes {
 			globalSeq++
 
-			rotated := false
-			expandedBox := image.Rect(box.Min.X-40, box.Min.Y-40, box.Max.X+40, box.Max.Y+40)
-			pageBounds := img.Bounds()
-			if expandedBox.Min.X < pageBounds.Min.X {
-				expandedBox.Min.X = pageBounds.Min.X
-			}
-			if expandedBox.Min.Y < pageBounds.Min.Y {
-				expandedBox.Min.Y = pageBounds.Min.Y
-			}
-			if expandedBox.Max.X > pageBounds.Max.X {
-				expandedBox.Max.X = pageBounds.Max.X
-			}
-			if expandedBox.Max.Y > pageBounds.Max.Y {
-				expandedBox.Max.Y = pageBounds.Max.Y
-			}
-			if hasGreenCircle(img, expandedBox) {
-				fmt.Fprintf(os.Stderr, "  green circle detected, will rotate 90° CCW\n")
-				eraseGreenPixels(img, expandedBox)
-				rotated = true
+			rotated := hasAnnotationType(pageAnnots, page, "rotate")
+			if rotated {
+				fmt.Fprintf(os.Stderr, "  rotate annotation found, will rotate 90° CCW\n")
 			}
 
 			cropped := cropImage(img, box)
@@ -155,6 +163,7 @@ func run(c *cli.Context) error {
 			}
 
 			bounds := cropped.Bounds()
+			noSky := hasAnnotationType(pageAnnots, page, "no_sky")
 			manifest.Images = append(manifest.Images, ImageEntry{
 				File:    filename,
 				Page:    page,
@@ -162,6 +171,7 @@ func run(c *cli.Context) error {
 				Width:   bounds.Dx(),
 				Height:  bounds.Dy(),
 				HadBlue: hadBlue,
+				NoSky:   noSky,
 				Rotated: rotated,
 			})
 
@@ -529,35 +539,6 @@ func savePNG(img *image.NRGBA, path string) error {
 	return png.Encode(f, img)
 }
 
-func isGreenPixel(c color.Color) bool {
-	r, g, b, _ := c.RGBA()
-	r8, g8, b8 := int(r>>8), int(g>>8), int(b>>8)
-	return g8 > 120 && g8 > r8+20 && g8 > b8+20
-}
-
-func hasGreenCircle(img *image.NRGBA, region image.Rectangle) bool {
-	count := 0
-	for y := region.Min.Y; y < region.Max.Y; y++ {
-		for x := region.Min.X; x < region.Max.X; x++ {
-			if isGreenPixel(img.At(x, y)) {
-				count++
-			}
-		}
-	}
-	return count > 50
-}
-
-func eraseGreenPixels(img *image.NRGBA, region image.Rectangle) {
-	white := color.NRGBA{255, 255, 255, 255}
-	for y := region.Min.Y; y < region.Max.Y; y++ {
-		for x := region.Min.X; x < region.Max.X; x++ {
-			if isGreenPixel(img.At(x, y)) {
-				img.Set(x, y, white)
-			}
-		}
-	}
-}
-
 func rotateCCW(img *image.NRGBA) *image.NRGBA {
 	bounds := img.Bounds()
 	w, h := bounds.Dx(), bounds.Dy()
@@ -568,4 +549,131 @@ func rotateCCW(img *image.NRGBA) *image.NRGBA {
 		}
 	}
 	return rotated
+}
+
+type pageAnnotation struct {
+	Page int
+	Type string
+	Text string
+}
+
+func readPDFAnnotations(pdfPath string) (map[int][]pageAnnotation, error) {
+	f, err := os.Open(pdfPath)
+	if err != nil {
+		return nil, fmt.Errorf("opening pdf: %w", err)
+	}
+	defer f.Close()
+
+	conf := model.NewDefaultConfiguration()
+	annots, err := api.Annotations(f, nil, conf)
+	if err != nil {
+		return nil, fmt.Errorf("reading annotations: %w", err)
+	}
+
+	result := make(map[int][]pageAnnotation)
+	for page, pgAnnots := range annots {
+		for _, annot := range pgAnnots {
+			for _, renderer := range annot.Map {
+				text := strings.TrimSpace(renderer.ContentString())
+				if text == "" {
+					continue
+				}
+				result[page] = append(result[page], pageAnnotation{
+					Page: page,
+					Type: classifyAnnotation(text),
+					Text: text,
+				})
+			}
+		}
+	}
+	return result, nil
+}
+
+func classifyAnnotation(text string) string {
+	lower := strings.ToLower(strings.TrimSpace(text))
+	if lower == "rotate" {
+		return "rotate"
+	}
+	if strings.HasPrefix(lower, "no sky") || strings.HasPrefix(lower, "no_sky") {
+		return "no_sky"
+	}
+	return "chapter"
+}
+
+func hasAnnotationType(annots map[int][]pageAnnotation, page int, typ string) bool {
+	for _, a := range annots[page] {
+		if a.Type == typ {
+			return true
+		}
+	}
+	return false
+}
+
+func updateManifests(c *cli.Context, absPDF string) error {
+	manifestPath := c.String("manifest")
+	if manifestPath == "" {
+		return fmt.Errorf("--manifest is required with --update-manifests")
+	}
+
+	absManifest, err := filepath.Abs(manifestPath)
+	if err != nil {
+		return fmt.Errorf("resolving manifest path: %w", err)
+	}
+
+	data, err := os.ReadFile(absManifest)
+	if err != nil {
+		return fmt.Errorf("reading manifest: %w", err)
+	}
+
+	var manifest Manifest
+	if err := yaml.Unmarshal(data, &manifest); err != nil {
+		return fmt.Errorf("parsing manifest: %w", err)
+	}
+
+	pageAnnots, err := readPDFAnnotations(absPDF)
+	if err != nil {
+		return fmt.Errorf("reading PDF annotations: %w", err)
+	}
+
+	for i := range manifest.Images {
+		page := manifest.Images[i].Page
+		manifest.Images[i].Rotated = hasAnnotationType(pageAnnots, page, "rotate")
+		manifest.Images[i].NoSky = hasAnnotationType(pageAnnots, page, "no_sky")
+	}
+
+	var chapters []ChapterEntry
+	for page, annots := range pageAnnots {
+		for _, a := range annots {
+			if a.Type == "chapter" {
+				chapters = append(chapters, ChapterEntry{Page: page, Title: a.Text})
+			}
+		}
+	}
+	sort.Slice(chapters, func(i, j int) bool {
+		return chapters[i].Page < chapters[j].Page
+	})
+	manifest.Chapters = chapters
+
+	out, err := yaml.Marshal(manifest)
+	if err != nil {
+		return fmt.Errorf("marshaling manifest: %w", err)
+	}
+	if err := os.WriteFile(absManifest, out, 0644); err != nil {
+		return fmt.Errorf("writing manifest: %w", err)
+	}
+
+	rotateCount := 0
+	noSkyCount := 0
+	for _, img := range manifest.Images {
+		if img.Rotated {
+			rotateCount++
+		}
+		if img.NoSky {
+			noSkyCount++
+		}
+	}
+
+	fmt.Fprintf(os.Stderr, "Updated %s: %d images (%d rotated, %d no_sky), %d chapters\n",
+		absManifest, len(manifest.Images), rotateCount, noSkyCount, len(chapters))
+	return nil
 }

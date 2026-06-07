@@ -9,6 +9,8 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
+require github.com/pdfcpu/pdfcpu v0.12.1 // indirect
+
 require (
 	github.com/TrueBlocks/trueblocks-art/packages/cli v0.0.0
 	golang.org/x/image v0.39.0 // indirect

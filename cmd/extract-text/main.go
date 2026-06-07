@@ -400,16 +400,35 @@ func convertArchiveToMarkdown(rawText string) string {
 // rePageNumber matches a line that is just a page number (with possible OCR noise)
 var rePageNumber = regexp.MustCompile(`^\d[\d\s\w]{0,4}$`)
 
+// reAnnotationText matches lines that are PDF annotation text bleeding through
+var reAnnotationText = regexp.MustCompile(`(?i)^(no sky\s*\d*|rotate)$`)
+
 func cleanPage(page string) string {
 	lines := strings.Split(page, "\n")
 
-	// First pass: collapse extra spaces and trim whitespace
+	// First pass: collapse extra spaces, detect indented lines as paragraph starts
 	var trimmed []string
 	for _, line := range lines {
+		raw := line
 		line = reExtraSpaces.ReplaceAllString(line, " ")
 		line = strings.TrimRight(line, " \t")
-		line = strings.TrimLeft(line, " \t")
-		trimmed = append(trimmed, line)
+
+		indent := 0
+		for _, ch := range raw {
+			if ch == ' ' {
+				indent++
+			} else if ch == '\t' {
+				indent += 4
+			} else {
+				break
+			}
+		}
+		cleaned := strings.TrimLeft(line, " \t")
+
+		if indent >= 3 && cleaned != "" && len(trimmed) > 0 && trimmed[len(trimmed)-1] != "" {
+			trimmed = append(trimmed, "")
+		}
+		trimmed = append(trimmed, cleaned)
 	}
 
 	// Strip leading blank lines
@@ -454,6 +473,8 @@ func cleanPage(page string) string {
 				paragraphs = append(paragraphs, joinLines(current))
 				current = nil
 			}
+		} else if reAnnotationText.MatchString(line) {
+			continue
 		} else {
 			current = append(current, line)
 		}

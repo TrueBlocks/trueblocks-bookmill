@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/TrueBlocks/trueblocks-art/packages/cli"
+	"gopkg.in/yaml.v3"
 )
 
 var version = "dev"
@@ -22,7 +23,8 @@ func main() {
 		Version:     version,
 		Flags: []cli.FlagDef{
 			{Name: "input", Help: "path to composed markdown file", Default: ""},
-			{Name: "output-dir", Help: "output directory for .docx file (default: works/imports/files/)", Default: ""},
+			{Name: "manifest", Help: "path to manifest.yaml (output_dir read from here)", Default: ""},
+			{Name: "output-dir", Help: "override output directory for .docx file", Default: ""},
 			{Name: "template", Help: "path to .dotm template", Default: ""},
 			{Name: "image-dir", Help: "directory containing colorized images for imageswap", Default: ""},
 			{Name: "slug", Help: "override imageswap slug (default: derived from docx filename)", Default: ""},
@@ -49,6 +51,19 @@ func run(c *cli.Context) error {
 	}
 
 	outputDir := c.String("output-dir")
+	if outputDir == "" {
+		manifestPath := c.String("manifest")
+		if manifestPath != "" {
+			if data, err := os.ReadFile(manifestPath); err == nil {
+				var m struct {
+					OutputDir string `yaml:"output_dir"`
+				}
+				if yaml.Unmarshal(data, &m) == nil && m.OutputDir != "" {
+					outputDir = expandHome(m.OutputDir)
+				}
+			}
+		}
+	}
 	if outputDir == "" {
 		outputDir = filepath.Join("works", "imports", "files")
 	}
@@ -159,4 +174,15 @@ func findTool(name string) string {
 	}
 
 	return ""
+}
+
+func expandHome(path string) string {
+	if strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return path
+		}
+		return filepath.Join(home, path[2:])
+	}
+	return path
 }
