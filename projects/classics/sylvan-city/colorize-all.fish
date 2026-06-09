@@ -105,24 +105,13 @@ end
 echo ""
 echo "=== Step 2: Imageswap into chapter .docx files ==="
 
-set -l tmpimg (mktemp -d)
 set -l swap_count 0
 
 for docx in $IMPORTS/cEssay*.docx
-    set -l base (basename "$docx" .docx)
-    set -l slugdir "$tmpimg/$base/images"
-    mkdir -p "$slugdir"
-
-    for img in $SUPPORT/p*.png
-        /bin/cp "$img" "$slugdir/"
-    end
-
-    imageswap --images "$tmpimg" "$docx"
+    imageswap --images "$SUPPORT" "$docx"
     set swap_count (math $swap_count + 1)
-    echo "  OK: $base"
+    echo "  OK: "(basename "$docx" .docx)
 end
-
-rm -rf "$tmpimg"
 
 # ── Done ───────────────────────────────────────────────────────────
 echo ""
