@@ -206,7 +206,7 @@ func splitByPageMarkers(content string) []pageBlock {
 	for i, loc := range matches {
 		marker := content[loc[0]:loc[1]]
 		var pageNum int
-		fmt.Sscanf(marker, "<!-- page %d -->", &pageNum)
+		_, _ = fmt.Sscanf(marker, "<!-- page %d -->", &pageNum)
 
 		var end int
 		if i+1 < len(matches) {
@@ -311,7 +311,7 @@ func splitByChapters(pages []pageBlock, outputDir string, chapters []ChapterEntr
 					if sourceImages != "" {
 						src := filepath.Join(sourceImages, imgFile)
 						if data, readErr := os.ReadFile(src); readErr == nil {
-							os.WriteFile(dst, data, 0644)
+							_ = os.WriteFile(dst, data, 0644)
 						}
 					}
 				}

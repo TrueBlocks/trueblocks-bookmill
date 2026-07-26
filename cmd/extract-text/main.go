@@ -107,7 +107,7 @@ func extractFromArchive(archiveID string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("downloading from archive: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("archive returned status %d for %s", resp.StatusCode, textURL)
@@ -196,7 +196,7 @@ func countPages(pdfPath string) int {
 	for _, line := range strings.Split(string(out), "\n") {
 		if strings.HasPrefix(line, "Pages:") {
 			var pages int
-			fmt.Sscanf(strings.TrimPrefix(line, "Pages:"), "%d", &pages)
+			_, _ = fmt.Sscanf(strings.TrimPrefix(line, "Pages:"), "%d", &pages)
 			return pages
 		}
 	}
@@ -414,13 +414,15 @@ func cleanPage(page string) string {
 		line = strings.TrimRight(line, " \t")
 
 		indent := 0
+	Loop:
 		for _, ch := range raw {
-			if ch == ' ' {
+			switch ch {
+			case ' ':
 				indent++
-			} else if ch == '\t' {
+			case '\t':
 				indent += 4
-			} else {
-				break
+			default:
+				break Loop
 			}
 		}
 		cleaned := strings.TrimLeft(line, " \t")

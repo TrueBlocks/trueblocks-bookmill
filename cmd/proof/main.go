@@ -159,7 +159,7 @@ func splitByPageMarkers(content string) []pageBlock {
 	for i, loc := range matches {
 		marker := content[loc[0]:loc[1]]
 		var pageNum int
-		fmt.Sscanf(marker, "<!-- page %d -->", &pageNum)
+		_, _ = fmt.Sscanf(marker, "<!-- page %d -->", &pageNum)
 
 		var end int
 		if i+1 < len(matches) {
@@ -183,7 +183,7 @@ func splitByPageMarkers(content string) []pageBlock {
 
 func renderPage(pdfPath string, pageNum, dpi int) ([]byte, error) {
 	tmpFile := filepath.Join(os.TempDir(), fmt.Sprintf("proof-page-%d.png", pageNum))
-	defer os.Remove(tmpFile)
+	defer func() { _ = os.Remove(tmpFile) }()
 
 	cmd := exec.Command("pdftoppm",
 		"-f", fmt.Sprintf("%d", pageNum),
@@ -271,7 +271,7 @@ Return ONLY the corrected text. No explanations, no markdown fences.`
 	if err != nil {
 		return "", fmt.Errorf("API request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

@@ -262,7 +262,7 @@ func (r *Runner) markInProgress(ps *PipelineState, essay *EssayState, stage Stag
 		Created:   essay.Meta[StageIdeas].Created,
 		Started:   nowString(),
 	}
-	ps.WriteMeta(stage, meta)
+	_ = ps.WriteMeta(stage, meta)
 
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
@@ -293,7 +293,7 @@ func (r *Runner) markComplete(ps *PipelineState, essay *EssayState, stage Stage,
 		TokensOut: result.OutputTokens,
 		Cost:      result.Cost,
 	}
-	ps.WriteMeta(stage, meta)
+	_ = ps.WriteMeta(stage, meta)
 
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
@@ -325,7 +325,7 @@ func (r *Runner) markError(ps *PipelineState, essay *EssayState, stage Stage, er
 		Error:     err.Error(),
 		Retries:   essay.ErrorRetries + 1,
 	}
-	ps.WriteMeta(stage, meta)
+	_ = ps.WriteMeta(stage, meta)
 
 	ps.mu.Lock()
 	defer ps.mu.Unlock()

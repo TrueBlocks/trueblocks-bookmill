@@ -50,7 +50,7 @@ func GenerateImage(apiKey, prompt, model, size, quality string) ([]byte, error) 
 	if err != nil {
 		return nil, fmt.Errorf("API call: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -88,7 +88,7 @@ func GenerateImage(apiKey, prompt, model, size, quality string) ([]byte, error) 
 	if err != nil {
 		return nil, fmt.Errorf("downloading image: %w", err)
 	}
-	defer imgResp.Body.Close()
+	defer func() { _ = imgResp.Body.Close() }()
 
 	if imgResp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("image download error %d", imgResp.StatusCode)

@@ -180,7 +180,7 @@ type PipelineState struct {
 
 func NewPipelineState(project, baseDir string) *PipelineState {
 	for _, name := range append(stageNames, "images") {
-		os.MkdirAll(filepath.Join(baseDir, name), 0755)
+		_ = os.MkdirAll(filepath.Join(baseDir, name), 0755)
 	}
 	genre, _ := LoadGenreFromProject(baseDir)
 	return &PipelineState{
@@ -478,7 +478,7 @@ func lockAccounting(path string) (*os.File, error) {
 		return nil, fmt.Errorf("opening lock file: %w", err)
 	}
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		f.Close()
+		_ = f.Close()
 		return nil, fmt.Errorf("acquiring lock: %w", err)
 	}
 	return f, nil
@@ -488,8 +488,8 @@ func unlockAccounting(f *os.File) {
 	if f == nil {
 		return
 	}
-	syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-	f.Close()
+	_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	_ = f.Close()
 }
 
 func loadAccounting(path string) (*AccountingFile, error) {
@@ -630,7 +630,7 @@ func (ps *PipelineState) RevertToStage(slug string, target Stage) ([]string, err
 	}
 
 	consolidateAccounting(af)
-	saveAccounting(ps.accountingPath(), af)
+	_ = saveAccounting(ps.accountingPath(), af)
 
 	exportDir := filepath.Join(ps.BaseDir, "export")
 	docxPath := filepath.Join(exportDir, exportFilenameFromParts(essay))
@@ -807,7 +807,7 @@ func (ps *PipelineState) RepairOrphans() []string {
 			mdPath := filepath.Join(dir, slug+".md")
 
 			if _, err := os.Stat(mdPath); os.IsNotExist(err) {
-				os.Remove(yamlPath)
+				_ = os.Remove(yamlPath)
 				repairs = append(repairs, fmt.Sprintf("removed orphan %s/%s (no .md file)", stageName, entry.Name()))
 				continue
 			}
@@ -824,7 +824,7 @@ func (ps *PipelineState) RepairOrphans() []string {
 				meta.Status = "final"
 				meta.Completed = nowString()
 				if fixed, err := yaml.Marshal(&meta); err == nil {
-					os.WriteFile(yamlPath, fixed, 0644)
+					_ = os.WriteFile(yamlPath, fixed, 0644)
 					repairs = append(repairs, fmt.Sprintf("fixed %s/%s (in-progress → final)", stageName, entry.Name()))
 				}
 			}

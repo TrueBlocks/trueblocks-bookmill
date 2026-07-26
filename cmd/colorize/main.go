@@ -306,7 +306,7 @@ func applySepia(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	img, err := png.Decode(f)
 	if err != nil {
@@ -342,7 +342,7 @@ func applySepia(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 	return png.Encode(out, result)
 }
 
@@ -380,7 +380,9 @@ func colorizeOpenAI(src, dst string, promptOverride string, noSky bool) error {
 	if _, err := part.Write(imgData); err != nil {
 		return fmt.Errorf("writing image data: %w", err)
 	}
-	w.Close()
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("closing multipart writer: %w", err)
+	}
 
 	req, err := http.NewRequest("POST", "https://api.openai.com/v1/images/edits", &body)
 	if err != nil {
@@ -394,7 +396,7 @@ func colorizeOpenAI(src, dst string, promptOverride string, noSky bool) error {
 	if err != nil {
 		return fmt.Errorf("API request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -430,7 +432,7 @@ func colorizeOpenAI(src, dst string, promptOverride string, noSky bool) error {
 		if err != nil {
 			return fmt.Errorf("downloading image: %w", err)
 		}
-		defer dlResp.Body.Close()
+		defer func() { _ = dlResp.Body.Close() }()
 		imgBytes, err = io.ReadAll(dlResp.Body)
 		if err != nil {
 			return fmt.Errorf("reading downloaded image: %w", err)

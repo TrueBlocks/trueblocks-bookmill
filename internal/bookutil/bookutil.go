@@ -54,7 +54,7 @@ func ReadDraft2(projectDir string, maxContentLen int) []types.EssayContent {
 		var meta types.EssayMeta
 		metaPath := filepath.Join(draft2Dir, slug+".meta.yaml")
 		if data, err := os.ReadFile(metaPath); err == nil {
-			yaml.Unmarshal(data, &meta)
+			_ = yaml.Unmarshal(data, &meta)
 		}
 		if meta.Title == "" {
 			meta.Title = slug

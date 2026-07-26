@@ -77,7 +77,7 @@ func invalidateBookArtifacts(baseDir string) {
 	for _, name := range []string{"back-cover-blurb.md", "front-cover-prompt.md", "front-cover.png"} {
 		p := filepath.Join(bookDir, name)
 		if fileExists(p) {
-			os.Remove(p)
+			_ = os.Remove(p)
 		}
 		entries, err := os.ReadDir(bookDir)
 		if err != nil {
@@ -87,7 +87,7 @@ func invalidateBookArtifacts(baseDir string) {
 			if e.IsDir() {
 				sp := filepath.Join(bookDir, e.Name(), name)
 				if fileExists(sp) {
-					os.Remove(sp)
+					_ = os.Remove(sp)
 				}
 			}
 		}

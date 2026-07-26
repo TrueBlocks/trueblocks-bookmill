@@ -143,7 +143,7 @@ func (c *AnthropicClient) callOnce(ctx context.Context, model, prompt string, ti
 	if err != nil {
 		return nil, fmt.Errorf("calling API: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

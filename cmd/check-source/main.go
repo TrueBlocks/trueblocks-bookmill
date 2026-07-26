@@ -155,7 +155,7 @@ func countPages(pdfPath string) int {
 	for _, line := range strings.Split(string(out), "\n") {
 		if strings.HasPrefix(line, "Pages:") {
 			var pages int
-			fmt.Sscanf(strings.TrimPrefix(line, "Pages:"), "%d", &pages)
+			_, _ = fmt.Sscanf(strings.TrimPrefix(line, "Pages:"), "%d", &pages)
 			return pages
 		}
 	}
@@ -288,7 +288,7 @@ func searchGutenberg(title, author string) string {
 	if err != nil {
 		return ""
 	}
-	defer httpResp.Body.Close()
+	defer func() { _ = httpResp.Body.Close() }()
 	if httpResp.StatusCode != http.StatusOK {
 		return ""
 	}
@@ -329,7 +329,7 @@ func httpGetJSON(rawURL string) (map[string]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("status %d", resp.StatusCode)
 	}

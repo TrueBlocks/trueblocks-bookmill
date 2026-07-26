@@ -220,7 +220,7 @@ func run(c *cli.Context) error {
 }
 
 func printFinalSummary(runner *pipeline.Runner) {
-	runner.LoadState()
+	_ = runner.LoadState()
 	for _, ps := range runner.Projects {
 		s := ps.Summary()
 		runner.Log.Printf("[%s] Final: pending=%d research=%d outline=%d draft=%d factcheck=%d done=%d (cost=$%.2f)",

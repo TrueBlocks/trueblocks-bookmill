@@ -201,7 +201,7 @@ func countPages(pdfPath string) int {
 	for _, line := range strings.Split(string(out), "\n") {
 		if strings.HasPrefix(line, "Pages:") {
 			var pages int
-			fmt.Sscanf(strings.TrimPrefix(line, "Pages:"), "%d", &pages)
+			_, _ = fmt.Sscanf(strings.TrimPrefix(line, "Pages:"), "%d", &pages)
 			return pages
 		}
 	}
@@ -236,7 +236,7 @@ func slugify(s string) string {
 func renderPageToImage(pdfPath string, pageNum, dpi int) (*image.NRGBA, error) {
 	tmpPrefix := filepath.Join(os.TempDir(), fmt.Sprintf("extract-img-p%d", pageNum))
 	tmpFile := tmpPrefix + ".png"
-	defer os.Remove(tmpFile)
+	defer func() { _ = os.Remove(tmpFile) }()
 
 	cmd := exec.Command("pdftoppm",
 		"-f", fmt.Sprintf("%d", pageNum),
@@ -255,7 +255,7 @@ func renderPageToImage(pdfPath string, pageNum, dpi int) (*image.NRGBA, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opening rendered page: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	img, err := png.Decode(f)
 	if err != nil {
@@ -535,7 +535,7 @@ func savePNG(img *image.NRGBA, path string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	return png.Encode(f, img)
 }
 
@@ -562,7 +562,7 @@ func readPDFAnnotations(pdfPath string) (map[int][]pageAnnotation, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opening pdf: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	conf := model.NewDefaultConfiguration()
 	annots, err := api.Annotations(f, nil, conf)

@@ -202,7 +202,7 @@ func countPages(pdfPath string) int {
 	for _, line := range strings.Split(string(out), "\n") {
 		if strings.HasPrefix(line, "Pages:") {
 			var pages int
-			fmt.Sscanf(strings.TrimPrefix(line, "Pages:"), "%d", &pages)
+			_, _ = fmt.Sscanf(strings.TrimPrefix(line, "Pages:"), "%d", &pages)
 			return pages
 		}
 	}
@@ -299,11 +299,7 @@ func isCoherentText(text string) bool {
 
 	// Should contain real words (spaces between groups of letters)
 	words := strings.Fields(cleaned)
-	if len(words) < 10 {
-		return false
-	}
-
-	return true
+	return len(words) >= 10
 }
 
 func searchGutenberg(title, author string) string {
@@ -394,7 +390,7 @@ func httpGetJSON(rawURL string) (map[string]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)

@@ -119,7 +119,7 @@ func (d *Dashboard) handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	tmpl.Execute(w, nil)
+	_ = tmpl.Execute(w, nil)
 }
 
 type statusResponse struct {
@@ -216,7 +216,7 @@ func (d *Dashboard) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func (d *Dashboard) handleStep(w http.ResponseWriter, r *http.Request) {
@@ -228,10 +228,10 @@ func (d *Dashboard) handleStep(w http.ResponseWriter, r *http.Request) {
 	select {
 	case d.stepCh <- struct{}{}:
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"ok":true}`)
+		_, _ = fmt.Fprintf(w, `{"ok":true}`)
 	default:
 		w.WriteHeader(http.StatusTooManyRequests)
-		fmt.Fprintf(w, `{"ok":false,"error":"step already pending"}`)
+		_, _ = fmt.Fprintf(w, `{"ok":false,"error":"step already pending"}`)
 	}
 }
 
@@ -270,7 +270,7 @@ func (d *Dashboard) handleOpen(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"ok":true,"path":"%s"}`, mdFile)
+	_, _ = fmt.Fprintf(w, `{"ok":true,"path":"%s"}`, mdFile)
 }
 
 func (d *Dashboard) handleOpenDocx(w http.ResponseWriter, r *http.Request) {
@@ -307,7 +307,7 @@ func (d *Dashboard) handleOpenDocx(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"ok":true,"path":"%s"}`, docxFile)
+	_, _ = fmt.Fprintf(w, `{"ok":true,"path":"%s"}`, docxFile)
 }
 
 var (
@@ -340,7 +340,7 @@ func (d *Dashboard) handleLogs(w http.ResponseWriter, r *http.Request) {
 	ver := d.LogBuf.Version()
 	entries := d.LogBuf.Entries(verbose)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(struct {
+	_ = json.NewEncoder(w).Encode(struct {
 		Version int64      `json:"version"`
 		Entries []LogEntry `json:"entries"`
 	}{Version: ver, Entries: entries})
@@ -361,7 +361,7 @@ func (d *Dashboard) handlePause(w http.ResponseWriter, r *http.Request) {
 		d.Runner.Log.Println("Pipeline RESUMED")
 	}
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"ok":true,"paused":%v}`, nowPaused)
+	_, _ = fmt.Fprintf(w, `{"ok":true,"paused":%v}`, nowPaused)
 }
 
 func (d *Dashboard) handleSettings(w http.ResponseWriter, r *http.Request) {
@@ -409,7 +409,7 @@ func (d *Dashboard) handleSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"ok":true}`)
+	_, _ = fmt.Fprintf(w, `{"ok":true}`)
 }
 
 func (d *Dashboard) handleAccounting(w http.ResponseWriter, r *http.Request) {
@@ -555,7 +555,7 @@ func (d *Dashboard) handleAccounting(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	tmpl.Execute(w, data)
+	_ = tmpl.Execute(w, data)
 }
 
 func (d *Dashboard) handleRevert(w http.ResponseWriter, r *http.Request) {
@@ -599,7 +599,7 @@ func (d *Dashboard) handleRevert(w http.ResponseWriter, r *http.Request) {
 	d.Runner.Log.Printf("[%s] REVERT %s to %s (removed: %v)", project, slug, stage, removed)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(struct {
+	_ = json.NewEncoder(w).Encode(struct {
 		Ok      bool     `json:"ok"`
 		Removed []string `json:"removed"`
 	}{Ok: true, Removed: removed})
@@ -659,7 +659,7 @@ func (d *Dashboard) handleRevertAll(w http.ResponseWriter, r *http.Request) {
 	d.Runner.Log.Printf("[%s] REVERT-ALL to %s (%d reverted, %d errors)", project, stage, reverted, len(errors))
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(struct {
+	_ = json.NewEncoder(w).Encode(struct {
 		Ok       bool     `json:"ok"`
 		Reverted int      `json:"reverted"`
 		Errors   []string `json:"errors,omitempty"`
@@ -700,7 +700,7 @@ func (d *Dashboard) handleDiskStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(struct {
+	_ = json.NewEncoder(w).Encode(struct {
 		Counts    map[string]int `json:"counts"`
 		TotalCost float64        `json:"total_cost"`
 	}{Counts: counts, TotalCost: totalCost})
@@ -743,7 +743,7 @@ func (d *Dashboard) handleEssays(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		for _, e := range ps.SnapshotEssays() {
-			if debugActive && !(e.Book == debugBook && e.Part == debugPart && e.Order == debugOrder) {
+			if debugActive && (e.Book != debugBook || e.Part != debugPart || e.Order != debugOrder) {
 				continue
 			}
 			stage := e.CurrentStage.String()
@@ -836,7 +836,7 @@ func (d *Dashboard) handleEssays(w http.ResponseWriter, r *http.Request) {
 	})
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(essays)
+	_ = json.NewEncoder(w).Encode(essays)
 }
 
 func stageRank(stage string) int {

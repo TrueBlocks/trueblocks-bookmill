@@ -85,7 +85,7 @@ func parsePlanFile(path string, bookNum string) ([]item, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opening %s: %w", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var items []item
 	var currentPart int

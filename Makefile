@@ -2,7 +2,10 @@ INSTALL_DIR = $(HOME)/source
 BINARIES = bookgen check-source colorize compose export extract-images extract-text imagerender inventory pipeline planbook proof read-annotations scaffold
 MSG ?= update
 
-.PHONY: build clean clobber add commit push cmds
+.PHONY: build clean clobber add commit push cmds lint
+
+lint:
+	@golangci-lint run
 
 cmds: build
 
@@ -24,11 +27,11 @@ clobber: clean
 add:
 	@git add -A
 
-commit: build
+commit: lint
 	@git add -A
 	@git commit -m "$(MSG)" || true
 
-push: build
+push: lint
 	@git add -A
 	@git commit -m "$(MSG)" || true
 	@git push

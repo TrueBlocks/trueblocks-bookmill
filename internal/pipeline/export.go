@@ -88,12 +88,12 @@ func (r *Runner) exportEssay(ps *PipelineState, essay *EssayState) error {
 	if err != nil {
 		return fmt.Errorf("creating temp file: %w", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 	if _, err := tmpFile.WriteString(cleaned); err != nil {
-		tmpFile.Close()
+		_ = tmpFile.Close()
 		return fmt.Errorf("writing temp file: %w", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	exportDir := filepath.Join(ps.BaseDir, "export")
 	if err := os.MkdirAll(exportDir, 0755); err != nil {
@@ -256,12 +256,12 @@ end tell
 	}
 	scriptPath := tmpFile.Name()
 	if _, err := tmpFile.WriteString(script); err != nil {
-		tmpFile.Close()
-		os.Remove(scriptPath)
+		_ = tmpFile.Close()
+		_ = os.Remove(scriptPath)
 		return fmt.Errorf("writing script: %w", err)
 	}
-	tmpFile.Close()
-	defer os.Remove(scriptPath)
+	_ = tmpFile.Close()
+	defer func() { _ = os.Remove(scriptPath) }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -269,7 +269,7 @@ end tell
 	cmd := exec.CommandContext(ctx, "osascript", scriptPath)
 	output, err := cmd.CombinedOutput()
 	if ctx.Err() == context.DeadlineExceeded {
-		return fmt.Errorf("Word upgrade timed out")
+		return fmt.Errorf("word upgrade timed out")
 	}
 	if err != nil {
 		return fmt.Errorf("osascript: %w: %s", err, string(output))

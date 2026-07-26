@@ -49,7 +49,7 @@ func run(c *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("opening pdf: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	conf := model.NewDefaultConfiguration()
 	annots, err := api.Annotations(f, nil, conf)
