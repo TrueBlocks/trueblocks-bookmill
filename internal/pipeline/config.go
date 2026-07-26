@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/TrueBlocks/trueblocks-art/packages/ai"
+	"github.com/TrueBlocks/trueblocks-art/packages/creds"
 	"gopkg.in/yaml.v3"
 )
 
@@ -108,13 +108,14 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("parsing config %s: %w", path, err)
 	}
 
-	if cfg.API.AnthropicKey == "" || cfg.API.OpenAIKey == "" {
-		shared, _ := ai.LoadSharedConfig()
-		if cfg.API.AnthropicKey == "" {
-			cfg.API.AnthropicKey = shared.AnthropicAPIKey
+	if cfg.API.AnthropicKey == "" {
+		if v, err := creds.Get("ANTHROPIC_API_KEY"); err == nil {
+			cfg.API.AnthropicKey = v
 		}
-		if cfg.API.OpenAIKey == "" {
-			cfg.API.OpenAIKey = shared.OpenAIAPIKey
+	}
+	if cfg.API.OpenAIKey == "" {
+		if v, err := creds.Get("OPENAI_API_KEY"); err == nil {
+			cfg.API.OpenAIKey = v
 		}
 	}
 

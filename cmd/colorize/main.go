@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/TrueBlocks/trueblocks-art/packages/cli"
+	"github.com/TrueBlocks/trueblocks-art/packages/creds"
 	"gopkg.in/yaml.v3"
 )
 
@@ -347,7 +348,7 @@ func applySepia(src, dst string) error {
 }
 
 func colorizeOpenAI(src, dst string, promptOverride string, noSky bool) error {
-	apiKey := os.Getenv("OPENAI_API_KEY")
+	apiKey := creds.MustGet("OPENAI_API_KEY")
 	if apiKey == "" {
 		return fmt.Errorf("OPENAI_API_KEY not set")
 	}

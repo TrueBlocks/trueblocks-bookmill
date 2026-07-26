@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/TrueBlocks/trueblocks-art/packages/cli"
+	"github.com/TrueBlocks/trueblocks-art/packages/creds"
 )
 
 var version = "dev"
@@ -61,10 +62,12 @@ func run(c *cli.Context) error {
 	}
 
 	if apiKey == "" {
-		apiKey = os.Getenv("OPENAI_API_KEY")
+		if v, err := creds.Get("OPENAI_API_KEY"); err == nil {
+			apiKey = v
+		}
 	}
 	if apiKey == "" && !dryRun {
-		return fmt.Errorf("--api-key or OPENAI_API_KEY environment variable is required")
+		return fmt.Errorf("--api-key or OPENAI_API_KEY credential is required")
 	}
 
 	absInput, err := filepath.Abs(inputPath)
