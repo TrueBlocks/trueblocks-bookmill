@@ -17,6 +17,8 @@ projects/*/factcheck/
 # Stray go-build artifacts (make installs all tools to ~/source)
 /bookgen
 cmd/bookgen/bookgen
+/bookmilld
+cmd/bookmilld/bookmilld
 /check-source
 cmd/check-source/check-source
 /colorize

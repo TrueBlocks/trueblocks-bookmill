@@ -3,6 +3,7 @@ module github.com/TrueBlocks/trueblocks-bookmill
 go 1.25.1
 
 require (
+	github.com/TrueBlocks/trueblocks-art/packages/appd v0.0.0
 	github.com/TrueBlocks/trueblocks-art/packages/ai v0.0.0
 	github.com/TrueBlocks/trueblocks-art/packages/bookgen v0.0.0-00010101000000-000000000000
 	github.com/TrueBlocks/trueblocks-art/packages/creds v0.0.0
@@ -29,6 +30,8 @@ require (
 	golang.org/x/image v0.43.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
 )
+
+replace github.com/TrueBlocks/trueblocks-art/packages/appd => ../packages/appd
 
 replace github.com/TrueBlocks/trueblocks-art/packages/ai => ../packages/ai
 
