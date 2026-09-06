@@ -1,12 +1,8 @@
 package main
 
 import (
-	"bytes"
-	"encoding/base64"
-	"encoding/json"
+	"context"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,8 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/TrueBlocks/trueblocks-art/packages/ai"
 	"github.com/TrueBlocks/trueblocks-art/packages/cli"
-	"github.com/TrueBlocks/trueblocks-art/packages/creds"
 )
 
 var version = "dev"
@@ -31,8 +27,7 @@ func main() {
 			{Name: "input", Help: "path to extracted markdown file (from extract-text)", Default: ""},
 			{Name: "pdf", Help: "path to the source PDF file (for rendering page images)", Default: ""},
 			{Name: "output", Help: "output proofed markdown file (default: stdout)", Default: ""},
-			{Name: "model", Help: "vision model to use (default: gpt-4o)", Default: "gpt-4o"},
-			{Name: "api-key", Help: "OpenAI API key (default: from OPENAI_API_KEY env)", Default: ""},
+			{Name: "text-model", Help: "vision model that proofs each page", Default: "gpt-4o"},
 			{Name: "dpi", Help: "DPI for rendering PDF pages (default: 200)", Default: 200},
 			{Name: "start-page", Help: "start proofreading from this page number (default: 1)", Default: 1},
 			{Name: "end-page", Help: "stop proofreading at this page number (default: all)", Default: 0},
@@ -47,8 +42,7 @@ func run(c *cli.Context) error {
 	inputPath := c.String("input")
 	pdfPath := c.String("pdf")
 	outputPath := c.String("output")
-	model := c.String("model")
-	apiKey := c.String("api-key")
+	model := c.String("text-model")
 	dpi := c.Int("dpi")
 	startPage := c.Int("start-page")
 	endPage := c.Int("end-page")
@@ -61,13 +55,13 @@ func run(c *cli.Context) error {
 		return fmt.Errorf("--pdf is required")
 	}
 
-	if apiKey == "" {
-		if v, err := creds.Get("OPENAI_API_KEY"); err == nil {
-			apiKey = v
+	var provider *ai.OpenAI
+	if !dryRun {
+		cfg, err := ai.LoadSharedConfig()
+		if err != nil {
+			return fmt.Errorf("loading AI config: %w", err)
 		}
-	}
-	if apiKey == "" && !dryRun {
-		return fmt.Errorf("--api-key or OPENAI_API_KEY credential is required")
+		provider = cfg.NewOpenAI()
 	}
 
 	absInput, err := filepath.Abs(inputPath)
@@ -88,6 +82,7 @@ func run(c *cli.Context) error {
 	fmt.Fprintf(os.Stderr, "Found %d pages to proof\n", len(pages))
 
 	var proofed []string
+	var totalCost float64
 	for i, page := range pages {
 		if page.pageNum < startPage {
 			proofed = append(proofed, page.raw)
@@ -118,14 +113,19 @@ func run(c *cli.Context) error {
 			continue
 		}
 
-		corrected, err := proofWithVision(apiKey, model, text, pageImage)
+		corrected, cost, err := proofWithVision(provider, model, text, pageImage)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "  warning: vision API error on page %d: %v\n", page.pageNum, err)
 			proofed = append(proofed, page.raw)
 			continue
 		}
+		totalCost += cost
 
 		proofed = append(proofed, fmt.Sprintf("<!-- page %d -->\n\n%s", page.pageNum, corrected))
+	}
+
+	if !dryRun {
+		fmt.Fprintf(os.Stderr, "Total API cost: $%.4f\n", totalCost)
 	}
 
 	result := strings.Join(proofed, "\n\n") + "\n"
@@ -208,9 +208,7 @@ func renderPage(pdfPath string, pageNum, dpi int) ([]byte, error) {
 	return data, nil
 }
 
-func proofWithVision(apiKey, model, text string, pageImage []byte) (string, error) {
-	imageB64 := base64.StdEncoding.EncodeToString(pageImage)
-
+func proofWithVision(provider *ai.OpenAI, model, text string, pageImage []byte) (string, float64, error) {
 	prompt := `You are proofreading OCR-extracted text from a historical book (pre-1926).
 
 Compare the extracted text against the page image. Fix ONLY:
@@ -227,78 +225,20 @@ Do NOT change:
 
 If you are uncertain about a correction, wrap it in: <!-- uncertain: original_text → corrected_text -->
 
-Return ONLY the corrected text. No explanations, no markdown fences.`
+Return ONLY the corrected text. No explanations, no markdown fences.
 
-	payload := map[string]interface{}{
-		"model": model,
-		"messages": []map[string]interface{}{
-			{
-				"role":    "system",
-				"content": prompt,
-			},
-			{
-				"role": "user",
-				"content": []map[string]interface{}{
-					{
-						"type": "text",
-						"text": fmt.Sprintf("Here is the extracted text from this page:\n\n%s", text),
-					},
-					{
-						"type": "image_url",
-						"image_url": map[string]string{
-							"url":    fmt.Sprintf("data:image/png;base64,%s", imageB64),
-							"detail": "high",
-						},
-					},
-				},
-			},
-		},
-		"max_tokens":  4096,
-		"temperature": 0.1,
-	}
+Here is the extracted text from this page:
 
-	body, err := json.Marshal(payload)
+` + text
+
+	result, err := provider.Call(context.Background(), model, prompt, ai.CallOptions{
+		MaxTokens: 4096,
+		Timeout:   120 * time.Second,
+		Images:    []ai.ImageInput{{MediaType: "image/png", Data: pageImage}},
+	})
 	if err != nil {
-		return "", fmt.Errorf("marshaling request: %w", err)
+		return "", 0, err
 	}
 
-	req, err := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return "", fmt.Errorf("creating request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-
-	client := &http.Client{Timeout: 120 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("API request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("reading response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	var result struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return "", fmt.Errorf("parsing response: %w", err)
-	}
-
-	if len(result.Choices) == 0 {
-		return "", fmt.Errorf("no choices in response")
-	}
-
-	return strings.TrimSpace(result.Choices[0].Message.Content), nil
+	return strings.TrimSpace(result.Content), result.Cost, nil
 }
