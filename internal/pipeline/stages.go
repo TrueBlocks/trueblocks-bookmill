@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/TrueBlocks/trueblocks-art/packages/ai"
 )
 
 func exportFilename(essay *EssayState) string {
@@ -40,7 +42,7 @@ func (r *Runner) autoSkipStage(ps *PipelineState, essay *EssayState, targetStage
 		return fmt.Errorf("auto-skip writing content: %w", err)
 	}
 
-	result := &APIResult{}
+	result := &ai.Result{}
 	r.markComplete(ps, essay, targetStage, "skip", result)
 	r.Log.Printf("    [skip] %s: %s (auto-skipped for %s)", essay.Slug, targetStage, essay.Type)
 	return nil
@@ -67,7 +69,7 @@ func (r *Runner) processEssay(ctx context.Context, ps *PipelineState, essay *Ess
 
 	r.markInProgress(ps, essay, targetStage, model)
 
-	var result *APIResult
+	var result *ai.Result
 	if r.Config.Pipeline.DryRun {
 		result = DryRunResult(targetStage, essay.Title)
 		r.Log.Printf("    [dry-run] %s", targetStage)
@@ -77,7 +79,10 @@ func (r *Runner) processEssay(ctx context.Context, ps *PipelineState, essay *Ess
 			timeout = 300 * time.Second
 		}
 		timeout *= time.Duration(essay.ErrorRetries + 1)
-		result, err = r.Client.Call(ctx, model, prompt, timeout)
+		result, err = r.Client.Call(ctx, model, prompt, ai.CallOptions{
+			MaxTokens: r.Config.API.MaxTokens,
+			Timeout:   timeout,
+		})
 		if err != nil {
 			return fmt.Errorf("%s/%s: %w", essay.Slug, targetStage, err)
 		}
@@ -271,7 +276,7 @@ func (r *Runner) markInProgress(ps *PipelineState, essay *EssayState, stage Stag
 	essay.Meta[stage] = meta
 }
 
-func (r *Runner) markComplete(ps *PipelineState, essay *EssayState, stage Stage, model string, result *APIResult) {
+func (r *Runner) markComplete(ps *PipelineState, essay *EssayState, stage Stage, model string, result *ai.Result) {
 	meta := &EssayMeta{
 		Slug:      essay.Slug,
 		Title:     essay.Title,

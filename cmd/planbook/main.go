@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/TrueBlocks/trueblocks-art/packages/ai"
 	appkit "github.com/TrueBlocks/trueblocks-art/packages/appkit/v2"
 	"github.com/TrueBlocks/trueblocks-art/packages/cli"
 	"github.com/TrueBlocks/trueblocks-bookmill/internal/pipeline"
@@ -27,7 +28,7 @@ func main() {
 			{Name: "output", Help: "output file path (default: stdout)"},
 			{Name: "title", Help: "working title for the book"},
 			{Name: "dry-run", Help: "print the prompt without calling the API", Default: false},
-			{Name: "model", Help: "Anthropic model to use", Default: "claude-sonnet-4-20250514"},
+			{Name: "model", Help: "Anthropic model to use", Default: "claude-sonnet-5"},
 			{Name: "config", Help: "path to config.yaml for API key", Default: pipeline.DefaultConfigPath()},
 		},
 		Run: run,
@@ -89,12 +90,12 @@ func run(c *cli.Context) error {
 		return fmt.Errorf("no anthropic_key in config")
 	}
 
-	client := &pipeline.AnthropicClient{APIKey: cfg.API.AnthropicKey}
+	client := &ai.Anthropic{APIKey: cfg.API.AnthropicKey, MaxRetries: 30}
 
 	c.Logger.Info("calling API", "model", model)
 	callCtx, cancel := context.WithTimeout(c.Context, 5*time.Minute)
 	defer cancel()
-	result, err := client.Call(callCtx, model, prompt, 5*time.Minute)
+	result, err := client.Call(callCtx, model, prompt, ai.CallOptions{Timeout: 5 * time.Minute})
 	if err != nil {
 		return fmt.Errorf("API: %w", err)
 	}

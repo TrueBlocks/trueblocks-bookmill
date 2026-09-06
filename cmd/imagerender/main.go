@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/TrueBlocks/trueblocks-art/packages/ai"
 	appkit "github.com/TrueBlocks/trueblocks-art/packages/appkit/v2"
 	"github.com/TrueBlocks/trueblocks-art/packages/cli"
 	"github.com/TrueBlocks/trueblocks-bookmill/internal/dalle"
@@ -19,6 +20,8 @@ import (
 )
 
 var version = "dev"
+
+const fixupModel = "claude-sonnet-5"
 
 type imageMeta struct {
 	Filename    string `yaml:"filename"`
@@ -316,8 +319,8 @@ RULES:
 - Fix the specific error, do not rewrite from scratch unless necessary.`,
 		lang, filepath.Base(srcPath), string(src), errorOutput, lang, method)
 
-	client := &pipeline.AnthropicClient{APIKey: apiKey}
-	result, err := client.Call(context.Background(), "claude-sonnet-4-20250514", prompt, 60*time.Second)
+	client := &ai.Anthropic{APIKey: apiKey, MaxRetries: 30}
+	result, err := client.Call(context.Background(), fixupModel, prompt, ai.CallOptions{Timeout: 60 * time.Second})
 	if err != nil {
 		return fmt.Errorf("API call: %w", err)
 	}
@@ -362,8 +365,8 @@ RULES:
 - Keep the same visual intent and composition as the original.
 - Keep it concise — under 400 words.`, string(src))
 
-	client := &pipeline.AnthropicClient{APIKey: apiKey}
-	result, err := client.Call(context.Background(), "claude-sonnet-4-20250514", prompt, 60*time.Second)
+	client := &ai.Anthropic{APIKey: apiKey, MaxRetries: 30}
+	result, err := client.Call(context.Background(), fixupModel, prompt, ai.CallOptions{Timeout: 60 * time.Second})
 	if err != nil {
 		return fmt.Errorf("API call: %w", err)
 	}

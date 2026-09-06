@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/TrueBlocks/trueblocks-art/packages/ai"
 )
 
 // exportYear is the year used in export filenames. Set by NewRunner from config.
@@ -122,7 +124,7 @@ func (r *Runner) exportEssay(ps *PipelineState, essay *EssayState) error {
 
 	r.Log.Printf("    exported → %s", exportName)
 
-	result := &APIResult{}
+	result := &ai.Result{}
 	r.markComplete(ps, essay, StageExport, "local", result)
 	return nil
 }
