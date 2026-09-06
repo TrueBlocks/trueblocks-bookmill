@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/TrueBlocks/trueblocks-art/packages/ai"
+	"github.com/TrueBlocks/trueblocks-art/packages/aiflags"
 	"github.com/TrueBlocks/trueblocks-art/packages/cli"
 )
 
@@ -27,7 +28,7 @@ func main() {
 			{Name: "input", Help: "path to extracted markdown file (from extract-text)", Default: ""},
 			{Name: "pdf", Help: "path to the source PDF file (for rendering page images)", Default: ""},
 			{Name: "output", Help: "output proofed markdown file (default: stdout)", Default: ""},
-			{Name: "text-model", Help: "vision model that proofs each page", Default: "gpt-4o"},
+			aiflags.TextModelFlag("gpt-4o"),
 			{Name: "dpi", Help: "DPI for rendering PDF pages (default: 200)", Default: 200},
 			{Name: "start-page", Help: "start proofreading from this page number (default: 1)", Default: 1},
 			{Name: "end-page", Help: "stop proofreading at this page number (default: all)", Default: 0},
@@ -42,7 +43,10 @@ func run(c *cli.Context) error {
 	inputPath := c.String("input")
 	pdfPath := c.String("pdf")
 	outputPath := c.String("output")
-	model := c.String("text-model")
+	model, _, err := aiflags.ResolveTextModel(c, "gpt-4o")
+	if err != nil {
+		return err
+	}
 	dpi := c.Int("dpi")
 	startPage := c.Int("start-page")
 	endPage := c.Int("end-page")

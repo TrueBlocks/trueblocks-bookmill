@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/TrueBlocks/trueblocks-art/packages/ai"
+	"github.com/TrueBlocks/trueblocks-art/packages/aiflags"
 	appkit "github.com/TrueBlocks/trueblocks-art/packages/appkit/v2"
 	"github.com/TrueBlocks/trueblocks-art/packages/cli"
 	"github.com/TrueBlocks/trueblocks-bookmill/internal/pipeline"
@@ -28,7 +29,7 @@ func main() {
 			{Name: "output", Help: "output file path (default: stdout)"},
 			{Name: "title", Help: "working title for the book"},
 			{Name: "dry-run", Help: "print the prompt without calling the API", Default: false},
-			{Name: "model", Help: "Anthropic model to use", Default: "claude-sonnet-5"},
+			aiflags.TextModelFlag("claude-sonnet-5"),
 			{Name: "config", Help: "path to config.yaml for API key", Default: pipeline.DefaultConfigPath()},
 		},
 		Run: run,
@@ -42,7 +43,10 @@ func run(c *cli.Context) error {
 	outputPath := c.String("output")
 	bookTitle := c.String("title")
 	dryRun := c.Bool("dry-run")
-	model := c.String("model")
+	model, _, err := aiflags.ResolveTextModel(c, "claude-sonnet-5")
+	if err != nil {
+		return err
+	}
 	configPath := c.String("config")
 
 	designDir := filepath.Dir(filepath.Clean(originsDir))
