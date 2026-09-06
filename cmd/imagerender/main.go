@@ -14,7 +14,6 @@ import (
 	"github.com/TrueBlocks/trueblocks-art/packages/ai"
 	appkit "github.com/TrueBlocks/trueblocks-art/packages/appkit/v2"
 	"github.com/TrueBlocks/trueblocks-art/packages/cli"
-	"github.com/TrueBlocks/trueblocks-bookmill/internal/dalle"
 	"github.com/TrueBlocks/trueblocks-bookmill/internal/pipeline"
 	"gopkg.in/yaml.v3"
 )
@@ -269,7 +268,11 @@ func renderAI(srcPath, outPath, apiKey string) error {
 	}
 	prompt := strings.TrimSpace(string(promptData))
 
-	imgData, err := dalle.GenerateImage(apiKey, prompt, "gpt-image-1", "1536x1024", "")
+	provider := &ai.DallE{APIKey: apiKey}
+	imgData, err := provider.GenerateImage(context.Background(), prompt, ai.ImageOptions{
+		Model: "gpt-image-1",
+		Size:  "1536x1024",
+	})
 	if err != nil {
 		return err
 	}

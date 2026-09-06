@@ -1,25 +1,19 @@
 package main
 
 import (
-	"bytes"
-	"encoding/base64"
-	"encoding/json"
+	"context"
 	"fmt"
 	"image"
 	"image/color"
 	"image/png"
-	"io"
 	"math"
-	"mime/multipart"
-	"net/http"
-	"net/textproto"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
+	"github.com/TrueBlocks/trueblocks-art/packages/ai"
 	"github.com/TrueBlocks/trueblocks-art/packages/cli"
 	"github.com/TrueBlocks/trueblocks-art/packages/creds"
 	"gopkg.in/yaml.v3"
@@ -62,7 +56,7 @@ func main() {
 			{Name: "input-dir", Help: "directory containing extracted B&W images and manifest.yaml", Default: ""},
 			{Name: "output-dir", Help: "override output directory for colorized images", Default: ""},
 			{Name: "copy-to", Help: "additional directory to copy colorized images to", Default: ""},
-			{Name: "tool", Help: "colorization tool to use: deoldify, python-script, or copy (default: copy)", Default: "copy"},
+			{Name: "tool", Help: "colorization tool to use: openai, deoldify, python-script, or copy (default: copy)", Default: "copy"},
 			{Name: "script", Help: "path to custom Python colorization script (used with --tool=python-script)", Default: ""},
 			{Name: "prompt", Help: "override the default colorization prompt for OpenAI", Default: ""},
 			{Name: "workers", Help: "number of concurrent workers for API calls (default: 4)", Default: 4},
@@ -366,90 +360,18 @@ func colorizeOpenAI(src, dst string, promptOverride string, noSky bool) error {
 		prompt = promptOverride
 	}
 
-	var body bytes.Buffer
-	w := multipart.NewWriter(&body)
-
-	_ = w.WriteField("model", "gpt-image-2")
-	_ = w.WriteField("prompt", prompt)
-	_ = w.WriteField("size", "auto")
-	_ = w.WriteField("quality", "high")
-
-	part, err := createPNGFormFile(w, "image[]", filepath.Base(src))
+	provider := &ai.DallE{APIKey: apiKey}
+	imgBytes, err := provider.GenerateImage(context.Background(), prompt, ai.ImageOptions{
+		Model:   "gpt-image-2",
+		Size:    "auto",
+		Quality: "high",
+		Input:   []ai.ImageInput{{MediaType: "image/png", Data: imgData}},
+	})
 	if err != nil {
-		return fmt.Errorf("creating form file: %w", err)
-	}
-	if _, err := part.Write(imgData); err != nil {
-		return fmt.Errorf("writing image data: %w", err)
-	}
-	if err := w.Close(); err != nil {
-		return fmt.Errorf("closing multipart writer: %w", err)
-	}
-
-	req, err := http.NewRequest("POST", "https://api.openai.com/v1/images/edits", &body)
-	if err != nil {
-		return fmt.Errorf("creating request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-	req.Header.Set("Content-Type", w.FormDataContentType())
-
-	client := &http.Client{Timeout: 300 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("API request failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("reading response: %w", err)
-	}
-
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	var result struct {
-		Data []struct {
-			B64JSON string `json:"b64_json"`
-			URL     string `json:"url"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return fmt.Errorf("parsing response: %w", err)
-	}
-
-	if len(result.Data) == 0 {
-		return fmt.Errorf("no image returned")
-	}
-
-	var imgBytes []byte
-	if result.Data[0].B64JSON != "" {
-		imgBytes, err = base64.StdEncoding.DecodeString(result.Data[0].B64JSON)
-		if err != nil {
-			return fmt.Errorf("decoding base64: %w", err)
-		}
-	} else if result.Data[0].URL != "" {
-		dlResp, err := http.Get(result.Data[0].URL)
-		if err != nil {
-			return fmt.Errorf("downloading image: %w", err)
-		}
-		defer func() { _ = dlResp.Body.Close() }()
-		imgBytes, err = io.ReadAll(dlResp.Body)
-		if err != nil {
-			return fmt.Errorf("reading downloaded image: %w", err)
-		}
-	} else {
-		return fmt.Errorf("no image data in response")
+		return fmt.Errorf("edit API: %w", err)
 	}
 
 	return os.WriteFile(dst, imgBytes, 0644)
-}
-
-func createPNGFormFile(w *multipart.Writer, fieldname, filename string) (io.Writer, error) {
-	h := make(textproto.MIMEHeader)
-	h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, fieldname, filename))
-	h.Set("Content-Type", "image/png")
-	return w.CreatePart(h)
 }
 
 func expandHome(path string) string {
