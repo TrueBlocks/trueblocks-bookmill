@@ -88,6 +88,9 @@ func (r *Runner) processEssay(ctx context.Context, ps *PipelineState, essay *Ess
 		}
 		r.Log.Printf("    tokens: %d in / %d out, cost: $%.4f",
 			result.InputTokens, result.OutputTokens, result.Cost)
+		if lerr := ai.RecordCall("bookmill", result, 0); lerr != nil {
+			r.Log.Printf("    WARNING: could not record cost: %v", lerr)
+		}
 	}
 
 	if err := ps.WriteContent(targetStage, essay.Slug, result.Content); err != nil {

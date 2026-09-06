@@ -239,6 +239,9 @@ Here is the extracted text from this page:
 	if err != nil {
 		return "", 0, err
 	}
+	if lerr := ai.RecordCall("proof", result, 0); lerr != nil {
+		fmt.Fprintf(os.Stderr, "  warning: could not record cost: %v\n", lerr)
+	}
 
 	return strings.TrimSpace(result.Content), result.Cost, nil
 }

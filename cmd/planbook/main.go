@@ -99,6 +99,9 @@ func run(c *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("API: %w", err)
 	}
+	if lerr := ai.RecordCall("planbook", result, 0); lerr != nil {
+		c.Logger.Warn("could not record cost", "err", lerr)
+	}
 
 	c.Logger.Info("api result",
 		"input_tokens", result.InputTokens,

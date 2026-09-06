@@ -327,6 +327,9 @@ RULES:
 	if err != nil {
 		return fmt.Errorf("API call: %w", err)
 	}
+	if lerr := ai.RecordCall("imagerender", result, 0); lerr != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not record cost: %v\n", lerr)
+	}
 
 	fixed := strings.TrimSpace(result.Content)
 	fixed = strings.TrimPrefix(fixed, "```r")
@@ -372,6 +375,9 @@ RULES:
 	result, err := client.Call(context.Background(), fixupModel, prompt, ai.CallOptions{Timeout: 60 * time.Second})
 	if err != nil {
 		return fmt.Errorf("API call: %w", err)
+	}
+	if lerr := ai.RecordCall("imagerender", result, 0); lerr != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not record cost: %v\n", lerr)
 	}
 
 	sanitized := strings.TrimSpace(result.Content)
