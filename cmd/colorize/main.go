@@ -74,6 +74,11 @@ func main() {
 }
 
 func run(c *cli.Context) error {
+	if changed, err := cooking.SyncMirror(); err != nil {
+		return fmt.Errorf("syncing prompts: %w", err)
+	} else if len(changed) > 0 {
+		fmt.Fprintf(os.Stderr, "Refreshed %d prompt(s) from changed source.\n", len(changed))
+	}
 	inputDir := c.String("input-dir")
 	if inputDir == "" {
 		return fmt.Errorf("--input-dir is required")
