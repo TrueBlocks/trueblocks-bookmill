@@ -45,10 +45,10 @@ func (r *Runner) generateBookArtifacts(ps *PipelineState) {
 	go func() {
 		if needBlurb {
 			r.Log.Printf("[%s] [book] generating back-cover blurb...", ps.Project)
-			cmd := exec.Command("bookblurb", ps.BaseDir)
+			cmd := exec.Command("bookgen", "blurb", ps.BaseDir)
 			output, err := cmd.CombinedOutput()
 			if err != nil {
-				r.Log.Printf("[%s] [book] WARNING: bookblurb: %v\n%s", ps.Project, err, string(output))
+				r.Log.Printf("[%s] [book] WARNING: bookgen blurb: %v\n%s", ps.Project, err, string(output))
 				return
 			}
 			r.Log.Printf("[%s] [book] blurb generated", ps.Project)
@@ -56,10 +56,10 @@ func (r *Runner) generateBookArtifacts(ps *PipelineState) {
 
 		if needCover {
 			r.Log.Printf("[%s] [book] generating front-cover prompt and image...", ps.Project)
-			cmd := exec.Command("bookcover", ps.BaseDir)
+			cmd := exec.Command("bookgen", "cover", ps.BaseDir)
 			output, err := cmd.CombinedOutput()
 			if err != nil {
-				r.Log.Printf("[%s] [book] WARNING: bookcover: %v\n%s", ps.Project, err, string(output))
+				r.Log.Printf("[%s] [book] WARNING: bookgen cover: %v\n%s", ps.Project, err, string(output))
 				return
 			}
 			r.Log.Printf("[%s] [book] cover generated", ps.Project)
