@@ -7,6 +7,7 @@ require (
 	github.com/TrueBlocks/trueblocks-art/packages/appd v0.0.0
 	github.com/TrueBlocks/trueblocks-art/packages/bookgen v0.0.0-00010101000000-000000000000
 	github.com/TrueBlocks/trueblocks-art/packages/creds v0.0.0
+	github.com/TrueBlocks/trueblocks-art/packages/prompt v0.0.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -35,6 +36,8 @@ require (
 replace github.com/TrueBlocks/trueblocks-art/packages/appd => ../packages/appd
 
 replace github.com/TrueBlocks/trueblocks-art/packages/ai => ../packages/ai
+
+replace github.com/TrueBlocks/trueblocks-art/packages/prompt => ../packages/prompt
 
 replace github.com/TrueBlocks/trueblocks-art/packages/bookgen => ../packages/bookgen
 

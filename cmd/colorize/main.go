@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"image"
 	"image/color"
@@ -16,10 +17,16 @@ import (
 	"github.com/TrueBlocks/trueblocks-art/packages/ai"
 	"github.com/TrueBlocks/trueblocks-art/packages/cli"
 	"github.com/TrueBlocks/trueblocks-art/packages/creds"
+	cooking "github.com/TrueBlocks/trueblocks-art/packages/prompt"
 	"gopkg.in/yaml.v3"
 )
 
 var version = "dev"
+
+//go:embed prompts/colorize.md
+var colorizePromptText string
+
+var colorizePromptTmpl = cooking.MustRegister("bookmill/cmd/colorize/prompts/colorize.md", colorizePromptText)
 
 type ImageEntry struct {
 	File    string `yaml:"file"`
@@ -352,7 +359,10 @@ func colorizeOpenAI(src, dst string, promptOverride string, noSky bool) error {
 		return fmt.Errorf("reading image: %w", err)
 	}
 
-	prompt := colorizePrompt(promptOverride, noSky)
+	prompt, err := colorizePrompt(promptOverride, noSky)
+	if err != nil {
+		return fmt.Errorf("building colorize prompt: %w", err)
+	}
 
 	provider := &ai.DallE{APIKey: apiKey}
 	imgBytes, err := provider.GenerateImage(context.Background(), prompt, ai.ImageOptions{
@@ -368,15 +378,11 @@ func colorizeOpenAI(src, dst string, promptOverride string, noSky bool) error {
 	return os.WriteFile(dst, imgBytes, 0644)
 }
 
-func colorizePrompt(override string, noSky bool) string {
+func colorizePrompt(override string, noSky bool) (string, error) {
 	if override != "" {
-		return override
+		return override, nil
 	}
-	prompt := "Colorize this black and white engraving with an elegant, refined color palette inspired by Impressionist painting. Soft natural light, harmonious warm and cool tones, gentle blue skies with luminous clouds, muted greens and warm ochres, subtle brick reds and cream stone. Colors should feel fresh and clean — not aged or darkened — but never garish or oversaturated. Keep all lines, details, and textures exactly as they are."
-	if noSky {
-		prompt += " This image does not contain sky."
-	}
-	return prompt
+	return colorizePromptTmpl.Fill(struct{ NoSky bool }{noSky})
 }
 
 func expandHome(path string) string {
