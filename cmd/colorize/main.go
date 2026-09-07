@@ -352,13 +352,7 @@ func colorizeOpenAI(src, dst string, promptOverride string, noSky bool) error {
 		return fmt.Errorf("reading image: %w", err)
 	}
 
-	prompt := "Colorize this black and white engraving with an elegant, refined color palette inspired by Impressionist painting. Soft natural light, harmonious warm and cool tones, gentle blue skies with luminous clouds, muted greens and warm ochres, subtle brick reds and cream stone. Colors should feel fresh and clean — not aged or darkened — but never garish or oversaturated. Keep all lines, details, and textures exactly as they are."
-	if noSky {
-		prompt += " This image does not contain sky."
-	}
-	if promptOverride != "" {
-		prompt = promptOverride
-	}
+	prompt := colorizePrompt(promptOverride, noSky)
 
 	provider := &ai.DallE{APIKey: apiKey}
 	imgBytes, err := provider.GenerateImage(context.Background(), prompt, ai.ImageOptions{
@@ -372,6 +366,17 @@ func colorizeOpenAI(src, dst string, promptOverride string, noSky bool) error {
 	}
 
 	return os.WriteFile(dst, imgBytes, 0644)
+}
+
+func colorizePrompt(override string, noSky bool) string {
+	if override != "" {
+		return override
+	}
+	prompt := "Colorize this black and white engraving with an elegant, refined color palette inspired by Impressionist painting. Soft natural light, harmonious warm and cool tones, gentle blue skies with luminous clouds, muted greens and warm ochres, subtle brick reds and cream stone. Colors should feel fresh and clean — not aged or darkened — but never garish or oversaturated. Keep all lines, details, and textures exactly as they are."
+	if noSky {
+		prompt += " This image does not contain sky."
+	}
+	return prompt
 }
 
 func expandHome(path string) string {
