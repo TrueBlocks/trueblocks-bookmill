@@ -10,8 +10,8 @@ The pipeline is a Go-based automated system that takes a collection of mathemati
 
 The pipeline runs as a long-lived process with a web dashboard, cycling every ~15 seconds, processing multiple essays concurrently via the Anthropic (Claude) API. It handles three **item types** — essays, section dividers, and book introductions — across a three-book series (~132 items total). Section dividers and introductions use the same stage infrastructure but auto-skip stages where no real work is needed.
 
-For details on sections, see [section-dividers.md](section-dividers.md).  
-For details on introductions, see [book-introductions.md](book-introductions.md).
+For details on sections, see [section-dividers.md](../../packages/writing/resources/bookmill__specs__section-dividers.md).  
+For details on introductions, see [book-introductions.md](../../packages/writing/resources/bookmill__specs__book-introductions.md).
 
 ---
 
@@ -62,7 +62,7 @@ The `type` field determines how the item flows through the pipeline:
 
 At skipped stages, the pipeline copies the previous stage's `.md` forward verbatim
 and marks the stage complete with zero tokens and zero cost. See the
-[section-dividers](section-dividers.md) and [book-introductions](book-introductions.md)
+[section-dividers](../../packages/writing/resources/bookmill__specs__section-dividers.md) and [book-introductions](../../packages/writing/resources/bookmill__specs__book-introductions.md)
 specs for full details.
 
 ### Stage 2: Research
@@ -79,7 +79,7 @@ specs for full details.
 
 ### Stage 3: Outline
 
-**Prompt focus:** Structure the essay using a **narrative arc** (one of 15 arcs, editorially assigned — see [narrative-arcs-and-endings.md](narrative-arcs-and-endings.md)). For each beat in the arc:
+**Prompt focus:** Structure the essay using a **narrative arc** (one of 15 arcs, editorially assigned — see [narrative-arcs-and-endings.md](../../packages/writing/resources/bookmill__specs__narrative-arcs-and-endings.md)). For each beat in the arc:
 - Section title
 - 2–3 sentence summary
 - Key facts from research
@@ -161,7 +161,7 @@ arc: slow-build
 ending: resolution
 ```
 
-See [narrative-arcs-and-endings.md](narrative-arcs-and-endings.md) for the full
+See [narrative-arcs-and-endings.md](../../packages/writing/resources/bookmill__specs__narrative-arcs-and-endings.md) for the full
 arc catalog, ending types, interaction matrix, and position-sensitive defaults.
 
 ---
@@ -374,9 +374,9 @@ As of March 2026:
 
 | Spec | Covers |
 |------|--------|
-| [narrative-arcs-and-endings.md](narrative-arcs-and-endings.md) | 15 arcs, 6 ending types, assignment rules, biographical enrichment |
-| [section-dividers.md](section-dividers.md) | Part title pages, auto-skip mechanism, placeholder images |
-| [book-introductions.md](book-introductions.md) | Book-level intro chapters, skip list, prompt guidance |
+| [narrative-arcs-and-endings.md](../../packages/writing/resources/bookmill__specs__narrative-arcs-and-endings.md) | 15 arcs, 6 ending types, assignment rules, biographical enrichment |
+| [section-dividers.md](../../packages/writing/resources/bookmill__specs__section-dividers.md) | Part title pages, auto-skip mechanism, placeholder images |
+| [book-introductions.md](../../packages/writing/resources/bookmill__specs__book-introductions.md) | Book-level intro chapters, skip list, prompt guidance |
 
 ## What This Spec Does NOT Cover
 

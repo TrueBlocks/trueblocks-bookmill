@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"text/template"
+
+	"github.com/TrueBlocks/trueblocks-art/packages/writing"
 )
 
 func (r *Runner) loadSpecs() {
@@ -20,13 +22,18 @@ func (r *Runner) loadSpecs() {
 	}
 }
 
+// genericPromptPrefix is the flattened-name prefix under which the generic
+// bookmill prompt chain lives in the shared packages/writing home. Series prompts
+// stay on disk under specs/prompts/series/<series>/ and take precedence.
+const genericPromptPrefix = "bookmill__specs__prompts__generic__"
+
 func (r *Runner) resolveSpecFile(series, filename string) ([]byte, error) {
 	seriesPath := filepath.Join(r.BaseDir, "specs", "prompts", "series", series, filename)
 	if data, err := os.ReadFile(seriesPath); err == nil {
 		return data, nil
 	}
-	genericPath := filepath.Join(r.BaseDir, "specs", "prompts", "generic", filename)
-	return os.ReadFile(genericPath)
+	// Generic prompts now come from the shared packages/writing home, not disk.
+	return writing.Read(genericPromptPrefix + filename)
 }
 
 func (r *Runner) loadSeriesSpecs(series string) *seriesSpecs {
@@ -62,59 +69,64 @@ func (r *Runner) loadSeriesSpecs(series string) *seriesSpecs {
 		specs.RevisionRules = extractSection(full, "## Revision Rules")
 	}
 
-	seriesPromptDir := filepath.Join(r.BaseDir, "specs", "prompts", "series", series)
-	genericPromptDir := filepath.Join(r.BaseDir, "specs", "prompts", "generic")
-
 	seen := make(map[string]bool)
-	for _, dir := range []string{seriesPromptDir, genericPromptDir} {
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			continue
-		}
+
+	// Series prompts stay on disk and take precedence over the generic chain.
+	seriesPromptDir := filepath.Join(r.BaseDir, "specs", "prompts", "series", series)
+	if entries, err := os.ReadDir(seriesPromptDir); err == nil {
 		for _, e := range entries {
 			if e.IsDir() || filepath.Ext(e.Name()) != ".md" {
 				continue
 			}
 			name := strings.TrimSuffix(e.Name(), ".md")
-			if name == "voice-summary" || name == "essay-rules" {
+			if name == "voice-summary" || name == "essay-rules" || seen[name] {
 				continue
 			}
-			if seen[name] {
-				continue
-			}
-			content, err := os.ReadFile(filepath.Join(dir, e.Name()))
+			content, err := os.ReadFile(filepath.Join(seriesPromptDir, e.Name()))
 			if err != nil {
 				r.Log.Printf("[%s] WARNING: could not read prompt template '%s': %v", series, name, err)
 				continue
 			}
-			tmpl, err := template.New(name).Parse(string(content))
-			if err != nil {
-				r.Log.Printf("[%s] WARNING: could not parse prompt template '%s': %v", series, name, err)
-				continue
+			if r.addPromptTemplate(specs, series, name, content) {
+				seen[name] = true
 			}
-			specs.PromptTemplates[name] = tmpl
+		}
+	}
+
+	// The generic prompt chain now comes from the shared packages/writing home.
+	for _, res := range writing.Names() {
+		if !strings.HasPrefix(res, genericPromptPrefix) || filepath.Ext(res) != ".md" {
+			continue
+		}
+		name := strings.TrimSuffix(strings.TrimPrefix(res, genericPromptPrefix), ".md")
+		if name == "voice-summary" || name == "essay-rules" || seen[name] {
+			continue
+		}
+		content, err := writing.Read(res)
+		if err != nil {
+			r.Log.Printf("[%s] WARNING: could not read prompt template '%s': %v", series, name, err)
+			continue
+		}
+		if r.addPromptTemplate(specs, series, name, content) {
 			seen[name] = true
 		}
 	}
 
-	exampleDir := filepath.Join(r.BaseDir, "specs", "examples")
-	exFiles, err := os.ReadDir(exampleDir)
-	if err != nil {
-		r.Log.Printf("[%s] Examples dir load failed: %v", series, err)
-	} else {
-		for _, f := range exFiles {
-			if f.IsDir() || filepath.Ext(f.Name()) != ".md" {
-				continue
-			}
-			category := strings.TrimSuffix(f.Name(), ".md")
-			content, err := os.ReadFile(filepath.Join(exampleDir, f.Name()))
-			if err != nil {
-				r.Log.Printf("[%s] WARNING: could not read examples '%s': %v", series, category, err)
-				continue
-			}
-			for k, v := range splitExamples(category, string(content)) {
-				specs.Examples[k] = v
-			}
+	// The craft examples now live in the shared packages/writing home, flattened
+	// as bookmill__specs__examples__<category>.md, instead of on disk under specs/.
+	const examplePrefix = "bookmill__specs__examples__"
+	for _, name := range writing.Names() {
+		if !strings.HasPrefix(name, examplePrefix) || filepath.Ext(name) != ".md" {
+			continue
+		}
+		category := strings.TrimSuffix(strings.TrimPrefix(name, examplePrefix), ".md")
+		content, err := writing.Read(name)
+		if err != nil {
+			r.Log.Printf("[%s] WARNING: could not read examples '%s': %v", series, category, err)
+			continue
+		}
+		for k, v := range splitExamples(category, string(content)) {
+			specs.Examples[k] = v
 		}
 	}
 
@@ -159,6 +171,18 @@ func (r *Runner) buildExamples(series string, keys ...string) string {
 		return ""
 	}
 	return "\n## REFERENCE EXAMPLES (for this essay's attributes)\n\nStudy these examples. They show the level of craft expected for this specific combination of attributes. Adapt the techniques — do not copy.\n\n" + strings.Join(parts, "\n\n---\n\n") + "\n"
+}
+
+// addPromptTemplate parses one prompt template and registers it, logging and
+// returning false on a parse error so the caller leaves it unseen.
+func (r *Runner) addPromptTemplate(specs *seriesSpecs, series, name string, content []byte) bool {
+	tmpl, err := template.New(name).Parse(string(content))
+	if err != nil {
+		r.Log.Printf("[%s] WARNING: could not parse prompt template '%s': %v", series, name, err)
+		return false
+	}
+	specs.PromptTemplates[name] = tmpl
+	return true
 }
 
 func extractSection(content, header string) string {
