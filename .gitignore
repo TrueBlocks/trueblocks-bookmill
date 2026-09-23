@@ -41,3 +41,4 @@ cmd/proof/proof
 /read-annotations
 cmd/read-annotations/read-annotations
 cmd/scaffold/scaffold
+cmd/proofscan/proofscan
