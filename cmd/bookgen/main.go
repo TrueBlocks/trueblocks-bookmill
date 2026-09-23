@@ -195,10 +195,15 @@ func runCover(c *cli.Context) error {
 	}
 
 	if result.ImageData != nil {
-		if wErr := os.WriteFile(imagePath, result.ImageData, appkit.FilePermissions); wErr != nil {
+		coverPath := imagePath
+		if adjusted, changed := ai.PathWithTrueExt(coverPath, result.ImageData); changed {
+			c.Logger.Info("named the cover for its true format", "requested", coverPath, "written", adjusted)
+			coverPath = adjusted
+		}
+		if wErr := os.WriteFile(coverPath, result.ImageData, appkit.FilePermissions); wErr != nil {
 			return fmt.Errorf("writing image: %w", wErr)
 		}
-		c.Logger.Info("wrote cover image", "path", imagePath)
+		c.Logger.Info("wrote cover image", "path", coverPath)
 	}
 
 	if err != nil {

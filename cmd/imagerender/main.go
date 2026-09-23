@@ -277,6 +277,12 @@ func renderAI(srcPath, outPath, apiKey string) error {
 		return err
 	}
 
+	// Name the figure for the bytes actually returned rather than assuming the
+	// output extension. gpt-image returns PNG today, so this is a no-op now; it
+	// keeps the tool from ever mislabeling a future format.
+	if adjusted, changed := ai.PathWithTrueExt(outPath, imgData); changed {
+		outPath = adjusted
+	}
 	return os.WriteFile(outPath, imgData, appkit.FilePermissions)
 }
 

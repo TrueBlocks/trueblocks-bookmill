@@ -380,6 +380,12 @@ func colorizeOpenAI(src, dst string, promptOverride string, noSky bool) error {
 		return fmt.Errorf("edit API: %w", err)
 	}
 
+	// Name the output for the bytes the editor actually returned rather than
+	// assuming the destination's extension. gpt-image returns PNG today, so this
+	// is a no-op now; it stops the tool from ever mislabeling.
+	if adjusted, changed := ai.PathWithTrueExt(dst, imgBytes); changed {
+		dst = adjusted
+	}
 	return os.WriteFile(dst, imgBytes, 0644)
 }
 
