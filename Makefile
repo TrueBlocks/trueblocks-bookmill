@@ -10,11 +10,9 @@ lint:
 cmds: build
 
 build:
-	@for bin in $(BINARIES); do \
-		echo "Building $$bin..."; \
-		go build -o $(INSTALL_DIR)/$$bin ./cmd/$$bin/.; \
-		rm -f $$bin; \
-	done
+	@mkdir -p $(INSTALL_DIR)
+	@echo "Building bookmill tools..."
+	@go build -o $(INSTALL_DIR)/ $(addprefix ./cmd/,$(BINARIES))
 
 clean:
 	@for bin in $(BINARIES); do \
