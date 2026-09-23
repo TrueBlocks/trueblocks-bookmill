@@ -32,13 +32,23 @@ const (
 	StageDone
 )
 
+const (
+	statusPending    = "pending"
+	statusInProgress = "in-progress"
+	statusFinal      = "final"
+	statusDone       = "done"
+	statusError      = "error"
+	typeSection      = "section"
+	typeIntroduction = "introduction"
+)
+
 var stageNames = []string{"ideas", "research", "outline", "draft", "factcheck", "continuity", "illustrate", "draft2", "revision", "export"}
 
 func (s Stage) String() string {
 	if int(s) < len(stageNames) {
 		return stageNames[s]
 	}
-	return "done"
+	return statusDone
 }
 
 func (s Stage) Dir() string { return s.String() }
@@ -120,31 +130,31 @@ func (e *EssayState) NextAction() Stage {
 }
 
 func (e *EssayState) NextActionForGenre(g *Genre) Stage {
-	if e.Status == "error" {
+	if e.Status == statusError {
 		return e.CurrentStage
 	}
 	if g != nil && len(g.Stages) > 0 {
 		currentName := e.CurrentStage.String()
-		if currentName == "ideas" && e.Status == "pending" {
+		if currentName == "ideas" && e.Status == statusPending {
 			return StageFromString(g.FirstContentStage())
 		}
-		if e.Status == "final" {
+		if e.Status == statusFinal {
 			next := g.NextStageAfter(currentName)
 			return StageFromString(next)
 		}
 		return StageDone
 	}
-	if e.CurrentStage == StageIdeas && e.Status == "pending" {
+	if e.CurrentStage == StageIdeas && e.Status == statusPending {
 		return StageResearch
 	}
-	if e.Status == "final" && e.CurrentStage < StageExport {
+	if e.Status == statusFinal && e.CurrentStage < StageExport {
 		return NextStage(e.CurrentStage)
 	}
 	return StageDone
 }
 
 func (e *EssayState) IsDone() bool {
-	return e.CurrentStage == StageExport && e.Status == "final"
+	return e.CurrentStage == StageExport && e.Status == statusFinal
 }
 
 func (e *EssayState) IsDoneForGenre(g *Genre) bool {
@@ -152,15 +162,15 @@ func (e *EssayState) IsDoneForGenre(g *Genre) bool {
 		return e.IsDone()
 	}
 	lastStage := g.Stages[len(g.Stages)-1]
-	return e.CurrentStage == StageFromString(lastStage) && e.Status == "final"
+	return e.CurrentStage == StageFromString(lastStage) && e.Status == statusFinal
 }
 
 func (e *EssayState) IsAvailable() bool {
 	next := e.NextAction()
-	if next == StageDone || e.Status == "in-progress" {
+	if next == StageDone || e.Status == statusInProgress {
 		return false
 	}
-	if e.Status == "error" && e.ErrorRetries >= 3 {
+	if e.Status == statusError && e.ErrorRetries >= 3 {
 		return false
 	}
 	return true
@@ -298,7 +308,7 @@ func (ps *PipelineState) LoadFromDisk() error {
 				essay.CurrentStage = stage
 				essay.Status = meta.Status
 			}
-			if meta.Status == "error" && stage == essay.CurrentStage {
+			if meta.Status == statusError && stage == essay.CurrentStage {
 				essay.ErrorRetries = meta.Retries
 			}
 			ps.TotalCost += meta.Cost
@@ -307,13 +317,13 @@ func (ps *PipelineState) LoadFromDisk() error {
 
 	exportDir := filepath.Join(ps.BaseDir, "export")
 	for _, essay := range ps.Essays {
-		if essay.CurrentStage == StageExport && essay.Status == "final" {
+		if essay.CurrentStage == StageExport && essay.Status == statusFinal {
 			continue
 		}
 		docxPath := filepath.Join(exportDir, exportFilename(essay))
 		if _, err := os.Stat(docxPath); err == nil {
 			essay.CurrentStage = StageExport
-			essay.Status = "final"
+			essay.Status = statusFinal
 		}
 	}
 
@@ -643,9 +653,9 @@ func (ps *PipelineState) RevertToStage(slug string, target Stage) ([]string, err
 
 	if target <= StageIdeas {
 		essay.CurrentStage = StageIdeas
-		essay.Status = "pending"
+		essay.Status = statusPending
 		if meta, ok := essay.Meta[StageIdeas]; ok {
-			meta.Status = "pending"
+			meta.Status = statusPending
 			if err := ps.WriteMeta(StageIdeas, meta); err != nil {
 				return removed, fmt.Errorf("resetting ideas meta: %w", err)
 			}
@@ -653,7 +663,7 @@ func (ps *PipelineState) RevertToStage(slug string, target Stage) ([]string, err
 	} else {
 		prev := target - 1
 		essay.CurrentStage = prev
-		essay.Status = "final"
+		essay.Status = statusFinal
 	}
 
 	return removed, nil
@@ -769,16 +779,16 @@ func (ps *PipelineState) Summary() map[string]int {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 	counts := map[string]int{
-		"pending": 0, "research": 0, "outline": 0,
-		"draft": 0, "factcheck": 0, "draft2": 0, "illustrate": 0, "done": 0, "error": 0,
+		statusPending: 0, "research": 0, "outline": 0,
+		"draft": 0, "factcheck": 0, "draft2": 0, "illustrate": 0, statusDone: 0, statusError: 0,
 	}
 	for _, e := range ps.Essays {
-		if e.Status == "error" {
-			counts["error"]++
+		if e.Status == statusError {
+			counts[statusError]++
 		} else if e.IsDone() {
-			counts["done"]++
+			counts[statusDone]++
 		} else if e.CurrentStage == StageIdeas {
-			counts["pending"]++
+			counts[statusPending]++
 		} else {
 			counts[e.CurrentStage.String()]++
 		}
@@ -820,8 +830,8 @@ func (ps *PipelineState) RepairOrphans() []string {
 			if err := yaml.Unmarshal(data, &meta); err != nil {
 				continue
 			}
-			if meta.Status == "in-progress" {
-				meta.Status = "final"
+			if meta.Status == statusInProgress {
+				meta.Status = statusFinal
 				meta.Completed = nowString()
 				if fixed, err := yaml.Marshal(&meta); err == nil {
 					_ = os.WriteFile(yamlPath, fixed, 0644)

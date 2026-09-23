@@ -8,6 +8,11 @@ import (
 	"time"
 )
 
+const (
+	levelError   = "error"
+	levelVerbose = "verbose"
+)
+
 type LogEntry struct {
 	Time    string `json:"time"`
 	Message string `json:"message"`
@@ -34,9 +39,9 @@ func (lb *LogBuffer) Write(p []byte) (n int, err error) {
 	}
 	level := "info"
 	if strings.Contains(msg, "ERROR") {
-		level = "error"
+		level = levelError
 	} else if strings.Contains(msg, "VERBOSE") {
-		level = "verbose"
+		level = levelVerbose
 	}
 	lb.mu.Lock()
 	defer lb.mu.Unlock()
@@ -62,7 +67,7 @@ func (lb *LogBuffer) Entries(verbose bool) []LogEntry {
 	}
 	var out []LogEntry
 	for _, e := range lb.entries {
-		if e.Level != "verbose" {
+		if e.Level != levelVerbose {
 			out = append(out, e)
 		}
 	}

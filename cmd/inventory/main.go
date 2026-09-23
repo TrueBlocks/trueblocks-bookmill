@@ -21,6 +21,11 @@ import (
 
 var version = "dev"
 
+const (
+	levelMedium = "medium"
+	levelEasy   = "easy"
+)
+
 type BookEntry struct {
 	File         string `yaml:"file" json:"file"`
 	Title        string `yaml:"title" json:"title"`
@@ -251,7 +256,7 @@ func checkEmbeddedText(pdfPath string, totalPages int) string {
 		return "high"
 	}
 	if ratio >= 0.3 {
-		return "medium"
+		return levelMedium
 	}
 	if goodPages > 0 {
 		return "low"
@@ -469,22 +474,22 @@ func significantWords(s string) []string {
 
 func scoreDifficulty(e BookEntry) string {
 	if e.ArchiveURL != "" || e.GutenbergURL != "" {
-		return "easy"
+		return levelEasy
 	}
 	if e.EmbeddedText == "high" {
-		return "easy"
+		return levelEasy
 	}
-	if e.EmbeddedText == "medium" {
-		return "medium"
+	if e.EmbeddedText == levelMedium {
+		return levelMedium
 	}
 	return "hard"
 }
 
 func difficultyRank(d string) int {
 	switch d {
-	case "easy":
+	case levelEasy:
 		return 0
-	case "medium":
+	case levelMedium:
 		return 1
 	case "hard":
 		return 2

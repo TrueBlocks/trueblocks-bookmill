@@ -20,6 +20,13 @@ import (
 
 var version = "dev"
 
+const (
+	sourceOCRNeeded  = "ocr-needed"
+	qualityMedium    = "medium"
+	difficultyEasy   = "easy"
+	difficultyMedium = "medium"
+)
+
 type SourceMeta struct {
 	File        string `yaml:"file"`
 	Title       string `yaml:"title"`
@@ -91,14 +98,14 @@ func run(c *cli.Context) error {
 	meta.TextQuality = checkTextQuality(absPDF, meta.Pages)
 	fmt.Fprintf(os.Stderr, "PDF text quality: %s\n", meta.TextQuality)
 
-	meta.SourceType = "ocr-needed"
+	meta.SourceType = sourceOCRNeeded
 	meta.Difficulty = "hard"
 
-	if meta.TextQuality == "high" || meta.TextQuality == "medium" {
+	if meta.TextQuality == "high" || meta.TextQuality == qualityMedium {
 		meta.SourceType = "embedded"
-		meta.Difficulty = "easy"
-		if meta.TextQuality == "medium" {
-			meta.Difficulty = "medium"
+		meta.Difficulty = difficultyEasy
+		if meta.TextQuality == qualityMedium {
+			meta.Difficulty = difficultyMedium
 		}
 	}
 
@@ -106,18 +113,18 @@ func run(c *cli.Context) error {
 		archiveURL := searchInternetArchive(meta.Title, meta.Author)
 		if archiveURL != "" {
 			fmt.Fprintf(os.Stderr, "Found Internet Archive: %s\n", archiveURL)
-			if meta.SourceType == "ocr-needed" {
+			if meta.SourceType == sourceOCRNeeded {
 				meta.SourceType = "archive"
-				meta.Difficulty = "easy"
+				meta.Difficulty = difficultyEasy
 			}
 			meta.SourceURL = archiveURL
 		} else {
 			gutenbergURL := searchGutenberg(meta.Title, meta.Author)
 			if gutenbergURL != "" {
 				fmt.Fprintf(os.Stderr, "Found Gutenberg: %s\n", gutenbergURL)
-				if meta.SourceType == "ocr-needed" {
+				if meta.SourceType == sourceOCRNeeded {
 					meta.SourceType = "gutenberg"
-					meta.Difficulty = "easy"
+					meta.Difficulty = difficultyEasy
 				}
 				meta.SourceURL = gutenbergURL
 			}
@@ -194,7 +201,7 @@ func checkTextQuality(pdfPath string, totalPages int) string {
 		return "high"
 	}
 	if ratio >= 0.3 {
-		return "medium"
+		return qualityMedium
 	}
 	if good > 0 {
 		return "low"

@@ -36,7 +36,7 @@ func run(c *cli.Context) error {
 		return fmt.Errorf("registering nav: %w", err)
 	}
 
-	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = fmt.Fprint(w, `<!doctype html>
 <html>
@@ -54,7 +54,7 @@ func run(c *cli.Context) error {
 </body>
 </html>`)
 	})
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})

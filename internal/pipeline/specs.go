@@ -27,6 +27,8 @@ func (r *Runner) loadSpecs() {
 // stay on disk under specs/prompts/series/<series>/ and take precedence.
 const genericPromptPrefix = "bookmill__specs__prompts__generic__"
 
+const mdExt = ".md"
+
 func (r *Runner) resolveSpecFile(series, filename string) ([]byte, error) {
 	seriesPath := filepath.Join(r.BaseDir, "specs", "prompts", "series", series, filename)
 	if data, err := os.ReadFile(seriesPath); err == nil {
@@ -75,10 +77,10 @@ func (r *Runner) loadSeriesSpecs(series string) *seriesSpecs {
 	seriesPromptDir := filepath.Join(r.BaseDir, "specs", "prompts", "series", series)
 	if entries, err := os.ReadDir(seriesPromptDir); err == nil {
 		for _, e := range entries {
-			if e.IsDir() || filepath.Ext(e.Name()) != ".md" {
+			if e.IsDir() || filepath.Ext(e.Name()) != mdExt {
 				continue
 			}
-			name := strings.TrimSuffix(e.Name(), ".md")
+			name := strings.TrimSuffix(e.Name(), mdExt)
 			if name == "voice-summary" || name == "essay-rules" || seen[name] {
 				continue
 			}
@@ -95,10 +97,10 @@ func (r *Runner) loadSeriesSpecs(series string) *seriesSpecs {
 
 	// The generic prompt chain now comes from the shared packages/writing home.
 	for _, res := range writing.Names() {
-		if !strings.HasPrefix(res, genericPromptPrefix) || filepath.Ext(res) != ".md" {
+		if !strings.HasPrefix(res, genericPromptPrefix) || filepath.Ext(res) != mdExt {
 			continue
 		}
-		name := strings.TrimSuffix(strings.TrimPrefix(res, genericPromptPrefix), ".md")
+		name := strings.TrimSuffix(strings.TrimPrefix(res, genericPromptPrefix), mdExt)
 		if name == "voice-summary" || name == "essay-rules" || seen[name] {
 			continue
 		}
@@ -116,10 +118,10 @@ func (r *Runner) loadSeriesSpecs(series string) *seriesSpecs {
 	// as bookmill__specs__examples__<category>.md, instead of on disk under specs/.
 	const examplePrefix = "bookmill__specs__examples__"
 	for _, name := range writing.Names() {
-		if !strings.HasPrefix(name, examplePrefix) || filepath.Ext(name) != ".md" {
+		if !strings.HasPrefix(name, examplePrefix) || filepath.Ext(name) != mdExt {
 			continue
 		}
-		category := strings.TrimSuffix(strings.TrimPrefix(name, examplePrefix), ".md")
+		category := strings.TrimSuffix(strings.TrimPrefix(name, examplePrefix), mdExt)
 		content, err := writing.Read(name)
 		if err != nil {
 			r.Log.Printf("[%s] WARNING: could not read examples '%s': %v", series, category, err)

@@ -18,9 +18,9 @@ func exportFilename(essay *EssayState) string {
 
 func shouldSkipStage(itemType string, stage Stage) bool {
 	switch itemType {
-	case "section":
+	case typeSection:
 		return stage != StageDraft2 && stage != StageExport
-	case "introduction":
+	case typeIntroduction:
 		return stage == StageResearch || stage == StageFactcheck || stage == StageIllustrate
 	}
 	return false
@@ -149,7 +149,7 @@ func (r *Runner) buildPrompt(ps *PipelineState, essay *EssayState, targetStage S
 
 	case StageOutline:
 		model = r.Config.Models.Outline
-		if essay.Type == "introduction" {
+		if essay.Type == typeIntroduction {
 			ideaContent := readContent(StageIdeas)
 			prompt = r.introOutlinePrompt(series, displayTitle, ideaContent)
 		} else {
@@ -163,7 +163,7 @@ func (r *Runner) buildPrompt(ps *PipelineState, essay *EssayState, targetStage S
 
 	case StageDraft:
 		model = r.Config.Models.Draft
-		if essay.Type == "introduction" {
+		if essay.Type == typeIntroduction {
 			outline := readContent(StageOutline)
 			ideaContent := readContent(StageIdeas)
 			prompt = r.introDraftPrompt(series, displayTitle, outline, ideaContent)
@@ -187,10 +187,10 @@ func (r *Runner) buildPrompt(ps *PipelineState, essay *EssayState, targetStage S
 	case StageDraft2:
 		model = r.Config.Models.Draft2
 		switch essay.Type {
-		case "section":
+		case typeSection:
 			ideaContent := readContent(StageIdeas)
 			prompt = r.sectionDraft2Prompt(series, displayTitle, ideaContent, ideaMeta.PartTitle)
-		case "introduction":
+		case typeIntroduction:
 			draft := readContent(StageDraft)
 			prompt = r.introDraft2Prompt(series, displayTitle, draft)
 		default:
@@ -263,7 +263,7 @@ func (r *Runner) markInProgress(ps *PipelineState, essay *EssayState, stage Stag
 		Part:      essay.Part,
 		PartTitle: essay.PartTitle,
 		Order:     essay.Order,
-		Status:    "in-progress",
+		Status:    statusInProgress,
 		Model:     model,
 		Arc:       essay.Arc,
 		Ending:    essay.Ending,
@@ -275,7 +275,7 @@ func (r *Runner) markInProgress(ps *PipelineState, essay *EssayState, stage Stag
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 	essay.CurrentStage = stage
-	essay.Status = "in-progress"
+	essay.Status = statusInProgress
 	essay.Meta[stage] = meta
 }
 
@@ -290,7 +290,7 @@ func (r *Runner) markComplete(ps *PipelineState, essay *EssayState, stage Stage,
 		Part:      essay.Part,
 		PartTitle: essay.PartTitle,
 		Order:     essay.Order,
-		Status:    "final",
+		Status:    statusFinal,
 		Model:     model,
 		Arc:       essay.Arc,
 		Ending:    essay.Ending,
@@ -306,7 +306,7 @@ func (r *Runner) markComplete(ps *PipelineState, essay *EssayState, stage Stage,
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 	essay.CurrentStage = stage
-	essay.Status = "final"
+	essay.Status = statusFinal
 	essay.Meta[stage] = meta
 	if stage == StageExport {
 		ps.SessionDone++
@@ -324,7 +324,7 @@ func (r *Runner) markError(ps *PipelineState, essay *EssayState, stage Stage, er
 		Part:      essay.Part,
 		PartTitle: essay.PartTitle,
 		Order:     essay.Order,
-		Status:    "error",
+		Status:    statusError,
 		Model:     "",
 		Arc:       essay.Arc,
 		Ending:    essay.Ending,
@@ -337,7 +337,7 @@ func (r *Runner) markError(ps *PipelineState, essay *EssayState, stage Stage, er
 
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
-	essay.Status = "error"
+	essay.Status = statusError
 	essay.ErrorRetries++
 	essay.Meta[stage] = meta
 	if essay.ErrorRetries >= 3 {

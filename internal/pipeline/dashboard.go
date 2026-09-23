@@ -112,7 +112,7 @@ func (d *Dashboard) Start() error {
 	return http.ListenAndServe(addr, mux)
 }
 
-func (d *Dashboard) handleIndex(w http.ResponseWriter, r *http.Request) {
+func (d *Dashboard) handleIndex(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	tmpl, err := template.New("dashboard").Parse(dashboardHTML)
 	if err != nil {
@@ -152,7 +152,7 @@ type projectStatusResponse struct {
 	HasCoverImage  bool           `json:"has_cover_image"`
 }
 
-func (d *Dashboard) handleStatus(w http.ResponseWriter, r *http.Request) {
+func (d *Dashboard) handleStatus(w http.ResponseWriter, _ *http.Request) {
 	d.mu.Lock()
 	lastLog := d.lastLog
 	nextAt := d.nextCycleAt
@@ -173,8 +173,8 @@ func (d *Dashboard) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	totalSummary := map[string]int{
-		"pending": 0, "research": 0, "outline": 0,
-		"draft": 0, "factcheck": 0, "draft2": 0, "illustrate": 0, "done": 0, "error": 0,
+		statusPending: 0, "research": 0, "outline": 0,
+		"draft": 0, "factcheck": 0, "draft2": 0, "illustrate": 0, statusDone: 0, statusError: 0,
 	}
 
 	var projectStatuses []projectStatusResponse
@@ -412,7 +412,7 @@ func (d *Dashboard) handleSettings(w http.ResponseWriter, r *http.Request) {
 	_, _ = fmt.Fprintf(w, `{"ok":true}`)
 }
 
-func (d *Dashboard) handleAccounting(w http.ResponseWriter, r *http.Request) {
+func (d *Dashboard) handleAccounting(w http.ResponseWriter, _ *http.Request) {
 	var allEntries []AccountingEntry
 	for _, ps := range d.Runner.Projects {
 		af, err := loadAccounting(ps.accountingPath())
@@ -666,7 +666,7 @@ func (d *Dashboard) handleRevertAll(w http.ResponseWriter, r *http.Request) {
 	}{Ok: len(errors) == 0, Reverted: reverted, Errors: errors})
 }
 
-func (d *Dashboard) handleDiskStats(w http.ResponseWriter, r *http.Request) {
+func (d *Dashboard) handleDiskStats(w http.ResponseWriter, _ *http.Request) {
 	stages := []string{"ideas", "research", "outline", "draft", "factcheck", "illustrate", "draft2", "export"}
 	counts := make(map[string]int, len(stages))
 
@@ -749,8 +749,8 @@ func (d *Dashboard) handleEssays(w http.ResponseWriter, r *http.Request) {
 			stage := e.CurrentStage.String()
 			status := e.Status
 			if e.IsDone() {
-				stage = "done"
-				status = "done"
+				stage = statusDone
+				status = statusDone
 			}
 			errMsg := ""
 			if meta, ok := e.Meta[e.CurrentStage]; ok && meta.Error != "" {
@@ -857,10 +857,9 @@ func stageRank(stage string) int {
 		return 6
 	case "ideas":
 		return 7
-	case "done":
+	case statusDone:
 		return 8
 	default:
 		return 9
 	}
 }
-

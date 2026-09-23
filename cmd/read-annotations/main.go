@@ -14,6 +14,8 @@ import (
 
 var version = "dev"
 
+const typeRotate = "rotate"
+
 type PageAnnotation struct {
 	Page int
 	Type string
@@ -95,8 +97,8 @@ func run(c *cli.Context) error {
 
 func classify(text string) string {
 	lower := strings.ToLower(strings.TrimSpace(text))
-	if lower == "rotate" {
-		return "rotate"
+	if lower == typeRotate {
+		return typeRotate
 	}
 	if strings.HasPrefix(lower, "no sky") || strings.HasPrefix(lower, "no_sky") {
 		return "no_sky"
@@ -117,7 +119,7 @@ func printYAML(results []PageAnnotation) {
 	var chapters []PageAnnotation
 	for _, r := range results {
 		switch r.Type {
-		case "rotate":
+		case typeRotate:
 			rotates = append(rotates, r)
 		case "no_sky":
 			noSkys = append(noSkys, r)
