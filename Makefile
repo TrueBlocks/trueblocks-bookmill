@@ -11,7 +11,7 @@ cmds: build
 
 build:
 	@mkdir -p $(INSTALL_DIR)
-	@echo "Building bookmill tools..."
+	@echo "Building bookmill tools: $(BINARIES)"
 	@go build -o $(INSTALL_DIR)/ $(addprefix ./cmd/,$(BINARIES))
 
 clean:
