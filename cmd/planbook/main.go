@@ -29,7 +29,7 @@ func main() {
 			{Name: "output", Help: "output file path (default: stdout)"},
 			{Name: "title", Help: "working title for the book"},
 			{Name: "dry-run", Help: "print the prompt without calling the API", Default: false},
-			aiflags.TextModelFlag("claude-sonnet-5"),
+			aiflags.TextModelFlag(""),
 			{Name: "config", Help: "path to config.yaml for API key", Default: pipeline.DefaultConfigPath()},
 		},
 		Run: run,
@@ -43,7 +43,11 @@ func run(c *cli.Context) error {
 	outputPath := c.String("output")
 	bookTitle := c.String("title")
 	dryRun := c.Bool("dry-run")
-	model, _, err := aiflags.ResolveTextModel(c, "claude-sonnet-5")
+	builtin, err := ai.RoleModel(ai.TierPro, ai.RoleCompose)
+	if err != nil {
+		return err
+	}
+	model, _, err := aiflags.ResolveTextModel(c, builtin)
 	if err != nil {
 		return err
 	}

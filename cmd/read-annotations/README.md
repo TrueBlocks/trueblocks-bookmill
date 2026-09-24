@@ -20,7 +20,7 @@ rest of the pipeline reads those notes back.
 It walks every annotation in the PDF and sorts each into one of three kinds:
 
 - `rotate` — exactly the word "rotate"
-- `no_sky` — anything starting with "no sky"
+- `no_sky` — anything starting with "no sky" (or "no_sky")
 - `chapter` — everything else, treated as a chapter title
 
 Default output is one line per annotation (`page 41  chapter  The Mill

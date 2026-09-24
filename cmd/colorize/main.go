@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/TrueBlocks/trueblocks-art/packages/ai"
+	"github.com/TrueBlocks/trueblocks-art/packages/aiflags"
 	"github.com/TrueBlocks/trueblocks-art/packages/cli"
 	"github.com/TrueBlocks/trueblocks-art/packages/creds"
 	cooking "github.com/TrueBlocks/trueblocks-art/packages/prompt"
@@ -63,9 +64,10 @@ func main() {
 			{Name: "input-dir", Help: "directory containing extracted B&W images and manifest.yaml", Default: ""},
 			{Name: "output-dir", Help: "override output directory for colorized images", Default: ""},
 			{Name: "copy-to", Help: "additional directory to copy colorized images to", Default: ""},
-			{Name: "tool", Help: "colorization tool to use: openai, deoldify, python-script, or copy (default: copy)", Default: "copy"},
+			{Name: "tool", Help: "colorization tool: ai, sepia, deoldify, python-script, or copy (default: copy)", Default: "copy"},
 			{Name: "script", Help: "path to custom Python colorization script (used with --tool=python-script)", Default: ""},
-			{Name: "prompt", Help: "override the default colorization prompt for OpenAI", Default: ""},
+			{Name: "prompt", Help: "override the default colorization prompt", Default: ""},
+			aiflags.ImageModelFlag(""),
 			{Name: "workers", Help: "number of concurrent workers for API calls (default: 4)", Default: 4},
 		},
 		Run: run,
@@ -135,9 +137,25 @@ func run(c *cli.Context) error {
 		workers = 1
 	}
 
+	// The AI tool reads its model from the registry's pro image slot — Gemini
+	// today — so adopting a better or cheaper drawer is a models.json edit, not
+	// a rebuild. --image-model overrides it (e.g. gpt-image-2 for the old path).
+	var aiModel string
+	if tool == "ai" {
+		builtin, err := ai.RoleModel(ai.TierPro, ai.RoleImage)
+		if err != nil {
+			return err
+		}
+		model, _, err := aiflags.ResolveImageModel(c, builtin)
+		if err != nil {
+			return err
+		}
+		aiModel = model
+	}
+
 	fmt.Fprintf(os.Stderr, "Colorizing %d images using %s (%d workers)...\n", len(manifest.Images), tool, workers)
 
-	if tool == "openai" && workers > 1 {
+	if tool == "ai" && workers > 1 {
 		type result struct {
 			idx  int
 			file string
@@ -160,7 +178,7 @@ func run(c *cli.Context) error {
 				for j := range jobs {
 					srcPath := filepath.Join(absInput, j.entry.File)
 					dstPath := filepath.Join(absOutput, j.entry.File)
-					err := colorizeOpenAI(srcPath, dstPath, promptOverride, j.entry.NoSky)
+					err := colorizeAI(srcPath, dstPath, aiModel, promptOverride, j.entry.NoSky)
 					results <- result{idx: j.idx, file: j.entry.File, err: err}
 				}
 			}()
@@ -203,8 +221,8 @@ func run(c *cli.Context) error {
 				err = copyFile(srcPath, dstPath)
 			case "sepia":
 				err = applySepia(srcPath, dstPath)
-			case "openai":
-				err = colorizeOpenAI(srcPath, dstPath, promptOverride, entry.NoSky)
+			case "ai":
+				err = colorizeAI(srcPath, dstPath, aiModel, promptOverride, entry.NoSky)
 			case "deoldify":
 				err = runDeOldify(srcPath, dstPath)
 			case "python-script":
@@ -353,10 +371,22 @@ func applySepia(src, dst string) error {
 	return png.Encode(out, result)
 }
 
-func colorizeOpenAI(src, dst string, promptOverride string, noSky bool) error {
-	apiKey := creds.MustGet("OPENAI_API_KEY")
+// colorizeAI edits one engraving with the resolved registry model, dispatching
+// to whichever provider owns it. The model is not hard-coded: it comes from the
+// pro image slot (Gemini today) or --image-model, so colorize is no longer a
+// special case that only OpenAI can serve.
+func colorizeAI(src, dst, model, promptOverride string, noSky bool) error {
+	spec, ok := ai.LookupModel(model)
+	if !ok || !spec.Draws {
+		return fmt.Errorf("%q is not a drawing model in the registry", model)
+	}
+	keyName, err := ai.KeyNameForProvider(spec.Provider)
+	if err != nil {
+		return err
+	}
+	apiKey := creds.MustGet(keyName)
 	if apiKey == "" {
-		return fmt.Errorf("OPENAI_API_KEY not set")
+		return fmt.Errorf("%s not set", keyName)
 	}
 
 	imgData, err := os.ReadFile(src)
@@ -369,24 +399,72 @@ func colorizeOpenAI(src, dst string, promptOverride string, noSky bool) error {
 		return fmt.Errorf("building colorize prompt: %w", err)
 	}
 
-	provider := &ai.DallE{APIKey: apiKey}
-	imgBytes, err := provider.GenerateImage(context.Background(), prompt, ai.ImageOptions{
-		Model:   "gpt-image-2",
-		Size:    "auto",
-		Quality: "high",
-		Input:   []ai.ImageInput{{MediaType: "image/png", Data: imgData}},
-	})
+	opts := ai.ImageOptions{
+		Model: model,
+		Input: []ai.ImageInput{{MediaType: "image/png", Data: imgData}},
+	}
+	// Match the output shape to the source so a captioned plate is not recropped:
+	// Gemini regenerates at an aspect ratio, so give it the nearest one to the
+	// engraving; OpenAI's "auto" already preserves the input's shape.
+	switch spec.Provider {
+	case ai.ProviderGemini:
+		opts.Size = nearestGeminiAspect(src)
+		opts.Resolution = "2K"
+	default:
+		opts.Size = "auto"
+		opts.Quality = "high"
+	}
+
+	provider, err := ai.ImageProviderFor(spec.Provider, apiKey)
+	if err != nil {
+		return err
+	}
+	imgBytes, err := provider.GenerateImage(context.Background(), prompt, opts)
 	if err != nil {
 		return fmt.Errorf("edit API: %w", err)
 	}
 
 	// Name the output for the bytes the editor actually returned rather than
-	// assuming the destination's extension. gpt-image returns PNG today, so this
-	// is a no-op now; it stops the tool from ever mislabeling.
+	// assuming the destination's extension — Gemini returns JPEG, OpenAI PNG.
 	if adjusted, changed := ai.PathWithTrueExt(dst, imgBytes); changed {
 		dst = adjusted
 	}
 	return os.WriteFile(dst, imgBytes, 0644)
+}
+
+// geminiAspects are the aspect ratios the Gemini image API accepts, paired with
+// their decimal value. nearestGeminiAspect picks the one closest to the source
+// so editing preserves the engraving's framing instead of cropping to a default.
+// defaultGeminiAspect is the fallback when the source's shape cannot be read.
+const defaultGeminiAspect = "2:3"
+
+var geminiAspects = []struct {
+	name  string
+	ratio float64
+}{
+	{"1:1", 1.0}, {defaultGeminiAspect, 2.0 / 3}, {"3:2", 3.0 / 2}, {"3:4", 3.0 / 4},
+	{"4:3", 4.0 / 3}, {"4:5", 4.0 / 5}, {"5:4", 5.0 / 4}, {"9:16", 9.0 / 16},
+	{"16:9", 16.0 / 9},
+}
+
+func nearestGeminiAspect(src string) string {
+	f, err := os.Open(src)
+	if err != nil {
+		return defaultGeminiAspect
+	}
+	defer func() { _ = f.Close() }()
+	cfg, _, err := image.DecodeConfig(f)
+	if err != nil || cfg.Height == 0 {
+		return defaultGeminiAspect
+	}
+	target := float64(cfg.Width) / float64(cfg.Height)
+	best, bestDiff := defaultGeminiAspect, math.MaxFloat64
+	for _, a := range geminiAspects {
+		if d := math.Abs(a.ratio - target); d < bestDiff {
+			best, bestDiff = a.name, d
+		}
+	}
+	return best
 }
 
 func colorizePrompt(override string, noSky bool) (string, error) {

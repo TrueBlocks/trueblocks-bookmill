@@ -28,7 +28,7 @@ func main() {
 			{Name: "input", Help: "path to extracted markdown file (from extract-text)", Default: ""},
 			{Name: "pdf", Help: "path to the source PDF file (for rendering page images)", Default: ""},
 			{Name: "output", Help: "output proofed markdown file (default: stdout)", Default: ""},
-			aiflags.TextModelFlag("gpt-4o"),
+			aiflags.TextModelFlag(""),
 			{Name: "dpi", Help: "DPI for rendering PDF pages (default: 200)", Default: 200},
 			{Name: "start-page", Help: "start proofreading from this page number (default: 1)", Default: 1},
 			{Name: "end-page", Help: "stop proofreading at this page number (default: all)", Default: 0},
@@ -43,7 +43,11 @@ func run(c *cli.Context) error {
 	inputPath := c.String("input")
 	pdfPath := c.String("pdf")
 	outputPath := c.String("output")
-	model, _, err := aiflags.ResolveTextModel(c, "gpt-4o")
+	builtin, err := ai.RoleModel(ai.TierPro, ai.RoleCompose)
+	if err != nil {
+		return err
+	}
+	model, _, err := aiflags.ResolveTextModel(c, builtin)
 	if err != nil {
 		return err
 	}

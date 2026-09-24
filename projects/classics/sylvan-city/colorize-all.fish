@@ -93,7 +93,7 @@ else
         end
     end
 
-    set -l colorize_args --input-dir "$batch_dir" --output-dir "$SUPPORT" --tool openai --workers 4
+    set -l colorize_args --input-dir "$batch_dir" --output-dir "$SUPPORT" --tool ai --workers 4
     if test -n "$PROMPT"
         set colorize_args $colorize_args --prompt "$PROMPT"
     end

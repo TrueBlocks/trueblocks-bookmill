@@ -57,7 +57,7 @@ while test $batch_start -le $TOTAL
     colorize \
         --input-dir "$batch_dir" \
         --output-dir "$SUPPORT" \
-        --tool openai \
+        --tool ai \
         --workers $WORKERS 2>&1 | tee /tmp/colorize-batch.log
 
     # Check for failures
@@ -106,7 +106,7 @@ while test $batch_start -le $TOTAL
             colorize \
                 --input-dir "$retry_dir" \
                 --output-dir "$SUPPORT" \
-                --tool openai \
+                --tool ai \
                 --workers 1 2>&1 | tee /tmp/colorize-retry.log
 
             set -l retry_failures (grep "FAILED" /tmp/colorize-retry.log | grep -oE 'p[0-9]+-[0-9]+\.png')

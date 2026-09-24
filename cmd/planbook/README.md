@@ -11,7 +11,7 @@ Anthropic API.
 planbook --origins design/mystery/origins --title "The Quaker Detective" --output "design/mystery/Plan for Mystery.md"
 ```
 
-planbook reads everything in the origins folder (`.md`, `.txt`, `.yaml`) —
+planbook reads everything in the origins folder (`.md`, `.txt`, `.yaml`, `.yml`) —
 notes, sketches, research, fragments — plus the series' `genre.yaml` from the
 folder above it, and asks the model for a single markdown Plan in the fixed
 house shape:
@@ -25,9 +25,9 @@ house shape:
 That table is exactly what `scaffold` parses, so the plan drops straight into
 `design/` and the mill runs from it. `--example` supplies an existing Plan as
 a format reference; `--dry-run` prints the assembled prompt without spending;
-`--text-model` picks the writer (default `claude-sonnet-5`). The call is
-logged to the shared cost ledger. An existing output file is overwritten with
-a warning.
+`--text-model` picks the writer (default: the ai registry's pro-tier compose
+model). The call is logged to the shared cost ledger. An existing output file
+is overwritten with a warning.
 
 ## Options
 

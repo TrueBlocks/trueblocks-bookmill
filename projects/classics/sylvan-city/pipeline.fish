@@ -70,7 +70,7 @@ else
     echo "=== Step 4: Colorize all images ==="
     colorize \
         --input-dir "$CACHE/extract-images" \
-        --tool openai \
+        --tool ai \
         --workers 4
     or begin; echo "ERROR: colorize failed"; exit 1; end
 end
