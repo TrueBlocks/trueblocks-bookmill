@@ -82,6 +82,7 @@ func (r *Runner) processEssay(ctx context.Context, ps *PipelineState, essay *Ess
 		result, err = r.Client.Call(ctx, model, prompt, ai.CallOptions{
 			MaxTokens: r.Config.API.MaxTokens,
 			Timeout:   timeout,
+			Effort:    r.Effort,
 		})
 		if err != nil {
 			return fmt.Errorf("%s/%s: %w", essay.Slug, targetStage, err)
@@ -134,11 +135,11 @@ func (r *Runner) buildPrompt(ps *PipelineState, essay *EssayState, targetStage S
 		displayTitle = ideaMeta.Title + ": " + essay.Subtitle
 	}
 
-	var prompt, model string
+	var prompt string
+	model := r.Model
 	targetWords := r.sampleWordTarget(essay)
 	switch targetStage {
 	case StageResearch:
-		model = r.Config.Models.Research
 		ideaContent := readContent(StageIdeas)
 		hook := displayTitle
 		hiddenMath := ""
@@ -148,7 +149,6 @@ func (r *Runner) buildPrompt(ps *PipelineState, essay *EssayState, targetStage S
 		prompt = r.researchPrompt(series, displayTitle, hook, hiddenMath, essay.Setting)
 
 	case StageOutline:
-		model = r.Config.Models.Outline
 		if essay.Type == typeIntroduction {
 			ideaContent := readContent(StageIdeas)
 			prompt = r.introOutlinePrompt(series, displayTitle, ideaContent)
@@ -162,7 +162,6 @@ func (r *Runner) buildPrompt(ps *PipelineState, essay *EssayState, targetStage S
 		}
 
 	case StageDraft:
-		model = r.Config.Models.Draft
 		if essay.Type == typeIntroduction {
 			outline := readContent(StageOutline)
 			ideaContent := readContent(StageIdeas)
@@ -179,13 +178,11 @@ func (r *Runner) buildPrompt(ps *PipelineState, essay *EssayState, targetStage S
 		}
 
 	case StageFactcheck:
-		model = r.Config.Models.Factcheck
 		draft := readContent(StageDraft)
 		research := readContent(StageResearch)
 		prompt = r.factcheckPrompt(series, displayTitle, draft, research)
 
 	case StageDraft2:
-		model = r.Config.Models.Draft2
 		switch essay.Type {
 		case typeSection:
 			ideaContent := readContent(StageIdeas)
@@ -203,20 +200,17 @@ func (r *Runner) buildPrompt(ps *PipelineState, essay *EssayState, targetStage S
 		}
 
 	case StageIllustrate:
-		model = r.Config.Models.Illustrate
 		draft := readContent(StageDraft)
 		factcheck := readContent(StageFactcheck)
 		mathVis, _ := MathVisByName(essay.MathVisibility)
 		prompt = r.illustratePrompt(series, displayTitle, draft, factcheck, essay.Slug, essay.Setting, mathVis)
 
 	case StageContinuity:
-		model = r.Config.Models.Draft
 		draft := readContent(StageDraft)
 		outline := readContent(StageOutline)
 		prompt = r.continuityPrompt(series, displayTitle, draft, outline)
 
 	case StageRevision:
-		model = r.Config.Models.Draft2
 		draft := readContent(StageDraft)
 		continuityNotes := readContent(StageContinuity)
 		prompt = r.revisionPrompt(series, displayTitle, draft, continuityNotes, targetWords)

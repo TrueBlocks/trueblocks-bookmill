@@ -28,6 +28,7 @@ func main() {
 			{Name: "input", Help: "path to extracted markdown file (from extract-text)", Default: ""},
 			{Name: "pdf", Help: "path to the source PDF file (for rendering page images)", Default: ""},
 			{Name: "output", Help: "output proofed markdown file (default: stdout)", Default: ""},
+			aiflags.SpendFlag(),
 			aiflags.TextModelFlag(""),
 			{Name: "dpi", Help: "DPI for rendering PDF pages (default: 200)", Default: 200},
 			{Name: "start-page", Help: "start proofreading from this page number (default: 1)", Default: 1},
@@ -43,11 +44,7 @@ func run(c *cli.Context) error {
 	inputPath := c.String("input")
 	pdfPath := c.String("pdf")
 	outputPath := c.String("output")
-	builtin, err := ai.RoleModel(ai.TierPro, ai.RoleCompose)
-	if err != nil {
-		return err
-	}
-	model, _, err := aiflags.ResolveTextModel(c, builtin)
+	model, spec, effort, err := aiflags.ResolveTierTextModel(c)
 	if err != nil {
 		return err
 	}
@@ -63,13 +60,20 @@ func run(c *cli.Context) error {
 		return fmt.Errorf("--pdf is required")
 	}
 
-	var provider *ai.OpenAI
+	var provider ai.Provider
 	if !dryRun {
 		cfg, err := ai.LoadSharedConfig()
 		if err != nil {
 			return fmt.Errorf("loading AI config: %w", err)
 		}
-		provider = cfg.NewOpenAI()
+		switch spec.Provider {
+		case ai.ProviderAnthropic:
+			provider = cfg.NewAnthropic()
+		case ai.ProviderOpenAI:
+			provider = cfg.NewOpenAI()
+		default:
+			return fmt.Errorf("proof reads page images with Anthropic or OpenAI models, not %s (%s)", model, spec.Provider)
+		}
 	}
 
 	absInput, err := filepath.Abs(inputPath)
@@ -121,7 +125,7 @@ func run(c *cli.Context) error {
 			continue
 		}
 
-		corrected, cost, err := proofWithVision(provider, model, text, pageImage)
+		corrected, cost, err := proofWithVision(provider, model, effort, text, pageImage)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "  warning: vision API error on page %d: %v\n", page.pageNum, err)
 			proofed = append(proofed, page.raw)
@@ -216,7 +220,7 @@ func renderPage(pdfPath string, pageNum, dpi int) ([]byte, error) {
 	return data, nil
 }
 
-func proofWithVision(provider *ai.OpenAI, model, text string, pageImage []byte) (string, float64, error) {
+func proofWithVision(provider ai.Provider, model, effort, text string, pageImage []byte) (string, float64, error) {
 	prompt := `You are proofreading OCR-extracted text from a historical book (pre-1926).
 
 Compare the extracted text against the page image. Fix ONLY:
@@ -242,6 +246,7 @@ Here is the extracted text from this page:
 	result, err := provider.Call(context.Background(), model, prompt, ai.CallOptions{
 		MaxTokens: 4096,
 		Timeout:   120 * time.Second,
+		Effort:    effort,
 		Images:    []ai.ImageInput{{MediaType: "image/png", Data: pageImage}},
 	})
 	if err != nil {

@@ -29,6 +29,8 @@ type Runner struct {
 	Config      *Config
 	Projects    []*PipelineState
 	Client      *ai.Anthropic
+	Model       string // every stage writes with this model
+	Effort      string // reasoning effort for Model; empty sends none
 	Log         *log.Logger
 	BaseDir     string
 	ConfigPath  string
@@ -39,17 +41,13 @@ type Runner struct {
 }
 
 func NewRunner(cfg *Config, baseDir string) *Runner {
-	pricing := make(map[string]*ai.ModelPricing, len(cfg.Pricing))
-	for key, p := range cfg.Pricing {
-		pricing[key] = &ai.ModelPricing{InputPer1M: p.InputPer1M, OutputPer1M: p.OutputPer1M}
-	}
 	r := &Runner{
 		Config: cfg,
 		Client: &ai.Anthropic{
 			APIKey:     cfg.API.AnthropicKey,
 			APIVersion: cfg.API.Version,
 			MaxRetries: 30,
-			Pricing:    pricing,
+			Pricing:    ai.ProviderPricing(ai.ProviderAnthropic),
 		},
 		Log:         log.New(os.Stdout, "", 0),
 		BaseDir:     baseDir,

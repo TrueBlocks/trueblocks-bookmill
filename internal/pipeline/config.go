@@ -13,12 +13,10 @@ import (
 )
 
 type Config struct {
-	API        APIConfig                `yaml:"api"`
-	Models     ModelsConfig             `yaml:"models"`
-	Pricing    map[string]*ModelPricing `yaml:"pricing"`
-	Pipeline   PipelineConfig           `yaml:"pipeline"`
-	Dashboard  DashboardConfig          `yaml:"dashboard"`
-	ExportYear string                   `yaml:"export_year"`
+	API        APIConfig       `yaml:"api"`
+	Pipeline   PipelineConfig  `yaml:"pipeline"`
+	Dashboard  DashboardConfig `yaml:"dashboard"`
+	ExportYear string          `yaml:"export_year"`
 }
 
 type APIConfig struct {
@@ -26,20 +24,6 @@ type APIConfig struct {
 	OpenAIKey    string `yaml:"openai_key"`
 	Version      string `yaml:"version"`
 	MaxTokens    int    `yaml:"max_tokens"`
-}
-
-type ModelPricing struct {
-	InputPer1M  float64 `yaml:"input_per_1m"`
-	OutputPer1M float64 `yaml:"output_per_1m"`
-}
-
-type ModelsConfig struct {
-	Research   string `yaml:"research"`
-	Outline    string `yaml:"outline"`
-	Draft      string `yaml:"draft"`
-	Factcheck  string `yaml:"factcheck"`
-	Draft2     string `yaml:"draft2"`
-	Illustrate string `yaml:"illustrate"`
 }
 
 type PipelineConfig struct {
@@ -75,18 +59,6 @@ func LoadConfig(path string) (*Config, error) {
 		API: APIConfig{
 			Version:   "2023-06-01",
 			MaxTokens: 8192,
-		},
-		Models: ModelsConfig{
-			Research:   "claude-sonnet-4-20250514",
-			Outline:    "claude-sonnet-4-20250514",
-			Draft:      "claude-sonnet-4-20250514",
-			Factcheck:  "claude-sonnet-4-20250514",
-			Draft2:     "claude-sonnet-4-20250514",
-			Illustrate: "claude-sonnet-4-20250514",
-		},
-		Pricing: map[string]*ModelPricing{
-			"opus":    {InputPer1M: 15.0, OutputPer1M: 75.0},
-			"default": {InputPer1M: 3.0, OutputPer1M: 15.0},
 		},
 		Pipeline: PipelineConfig{
 			MaxPerCycle:   6,

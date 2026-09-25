@@ -25,8 +25,8 @@ house shape:
 That table is exactly what `scaffold` parses, so the plan drops straight into
 `design/` and the mill runs from it. `--example` supplies an existing Plan as
 a format reference; `--dry-run` prints the assembled prompt without spending;
-`--text-model` picks the writer (default: the ai registry's pro-tier compose
-model). The call is logged to the shared cost ledger. An existing output file
+`--spend cheap|pro` picks the writer from the ai registry's compose role at that
+tier and effort (default cheap); `--text-model` names another. The call is logged to the shared cost ledger. An existing output file
 is overwritten with a warning.
 
 ## Options
@@ -46,6 +46,7 @@ Flags:
   --output       output file path (default: stdout)
   --title        working title for the book
   --dry-run      print the prompt without calling the API
+  --spend        cheap | pro — the model tier
   --text-model   model that writes (see the ai registry)
   --config       path to config.yaml for API key
   -v, --verbose  enable verbose (debug) logging

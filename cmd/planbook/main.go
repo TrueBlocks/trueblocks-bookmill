@@ -29,6 +29,7 @@ func main() {
 			{Name: "output", Help: "output file path (default: stdout)"},
 			{Name: "title", Help: "working title for the book"},
 			{Name: "dry-run", Help: "print the prompt without calling the API", Default: false},
+			aiflags.SpendFlag(),
 			aiflags.TextModelFlag(""),
 			{Name: "config", Help: "path to config.yaml for API key", Default: pipeline.DefaultConfigPath()},
 		},
@@ -43,13 +44,12 @@ func run(c *cli.Context) error {
 	outputPath := c.String("output")
 	bookTitle := c.String("title")
 	dryRun := c.Bool("dry-run")
-	builtin, err := ai.RoleModel(ai.TierPro, ai.RoleCompose)
+	model, spec, effort, err := aiflags.ResolveTierTextModel(c)
 	if err != nil {
 		return err
 	}
-	model, _, err := aiflags.ResolveTextModel(c, builtin)
-	if err != nil {
-		return err
+	if spec.Provider != ai.ProviderAnthropic {
+		return fmt.Errorf("planbook calls Anthropic; %s is a %s model", model, spec.Provider)
 	}
 	configPath := c.String("config")
 
@@ -103,7 +103,7 @@ func run(c *cli.Context) error {
 	c.Logger.Info("calling API", "model", model)
 	callCtx, cancel := context.WithTimeout(c.Context, 5*time.Minute)
 	defer cancel()
-	result, err := client.Call(callCtx, model, prompt, ai.CallOptions{Timeout: 5 * time.Minute})
+	result, err := client.Call(callCtx, model, prompt, ai.CallOptions{Timeout: 5 * time.Minute, Effort: effort})
 	if err != nil {
 		return fmt.Errorf("API: %w", err)
 	}

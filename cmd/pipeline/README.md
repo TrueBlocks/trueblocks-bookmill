@@ -29,6 +29,12 @@ third Ctrl-C force-quits.
 `--dry-run` runs the whole machinery without API calls; `--once` runs a
 single cycle and exits.
 
+Every stage writes with one model: the compose role at the `--spend` tier
+(`cheap`, the default, or `pro`) from the installed model registry
+(`~/.local/share/trueblocks/models.json`), at that tier's compose effort.
+`--text-model` names a different model; it must be a writer the registry
+knows. Prices come from the same registry.
+
 ## Options
 
 Run `pipeline --help` for the full option list:
@@ -45,6 +51,8 @@ Flags:
   --dry-run      override config to force dry-run mode
   --once         run a single cycle and exit
   --port         override dashboard port
+  --spend        cheap | pro — the model tier
+  --text-model   model that writes (see the ai registry)
   -v, --verbose  enable verbose (debug) logging
   -q, --quiet    suppress info logging (warnings/errors only)
   -h, --help     show this help and exit

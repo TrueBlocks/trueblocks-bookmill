@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/TrueBlocks/trueblocks-art/packages/aiflags"
 	"github.com/TrueBlocks/trueblocks-art/packages/cli"
 	"github.com/TrueBlocks/trueblocks-bookmill/internal/pipeline"
 )
@@ -27,6 +28,8 @@ func main() {
 			{Name: "dry-run", Help: "override config to force dry-run mode", Default: false},
 			{Name: "once", Help: "run a single cycle and exit", Default: false},
 			{Name: "port", Help: "override dashboard port", Default: 0},
+			aiflags.SpendFlag(),
+			aiflags.TextModelFlag(""),
 		},
 		Run: run,
 	}
@@ -38,6 +41,10 @@ func run(c *cli.Context) error {
 	dryRun := c.Bool("dry-run")
 	once := c.Bool("once")
 	port := c.Int("port")
+	model, _, effort, err := aiflags.ResolveTierTextModel(c)
+	if err != nil {
+		return err
+	}
 
 	cfg, err := pipeline.LoadConfig(configPath)
 	if err != nil {
@@ -58,6 +65,8 @@ func run(c *cli.Context) error {
 
 	logBuf := pipeline.NewLogBuffer(os.Stdout, 1000)
 	runner := pipeline.NewRunner(cfg, cwd)
+	runner.Model = model
+	runner.Effort = effort
 	runner.ConfigPath = configPath
 	runner.CLIDryRun = dryRun
 	runner.Log = log.New(logBuf, "", 0)
