@@ -12,15 +12,15 @@ import (
 	"time"
 
 	"github.com/TrueBlocks/trueblocks-art/packages/ai"
+	"github.com/TrueBlocks/trueblocks-art/packages/aiflags"
 	appkit "github.com/TrueBlocks/trueblocks-art/packages/appkit/v2"
 	"github.com/TrueBlocks/trueblocks-art/packages/cli"
+	"github.com/TrueBlocks/trueblocks-art/packages/creds"
 	"github.com/TrueBlocks/trueblocks-bookmill/internal/pipeline"
 	"gopkg.in/yaml.v3"
 )
 
 var version = "dev"
-
-const fixupModel = "claude-sonnet-5"
 
 type imageMeta struct {
 	Filename    string `yaml:"filename"`
@@ -39,6 +39,9 @@ func main() {
 			{Name: "data", Help: "path to data directory containing common.R and mermaid-theme.json"},
 			{Name: "slug", Help: "render images for a specific essay slug only"},
 			{Name: "force", Help: "re-render even if PNG exists and is newer than source", Default: false},
+			aiflags.SpendFlag(),
+			aiflags.TextModelFlag(""),
+			aiflags.ImageModelFlag(""),
 		},
 		Run: run,
 	}
@@ -51,6 +54,21 @@ func run(c *cli.Context) error {
 	slug := c.String("slug")
 	force := c.Bool("force")
 	baseDir := c.String("base-dir")
+
+	// Code repairs and prompt cleanups run on the compose model at --spend
+	// (with its effort); figures draw with the image model at --spend. The
+	// override flags name either outright.
+	textModel, textSpec, effort, err := aiflags.ResolveTierTextModel(c)
+	if err != nil {
+		return err
+	}
+	if textSpec.Provider != ai.ProviderAnthropic {
+		return cli.NewUsageError(fmt.Errorf("imagerender repairs with Anthropic; %s is a %s model", textModel, textSpec.Provider))
+	}
+	imageModel, imageSpec, err := aiflags.ResolveTierImageModel(c)
+	if err != nil {
+		return err
+	}
 
 	cfg, err := pipeline.LoadConfig(configPath)
 	if err != nil {
@@ -148,7 +166,7 @@ func run(c *cli.Context) error {
 				case "r":
 					renderOutput, renderErr = renderR(srcPath, outPath, commonR)
 				case "ai":
-					renderErr = renderAI(srcPath, outPath, cfg.API.OpenAIKey)
+					renderErr = renderAI(srcPath, outPath, imageModel, imageSpec)
 					renderOutput = ""
 				}
 
@@ -159,7 +177,7 @@ func run(c *cli.Context) error {
 				if meta.Method == "ai" {
 					if isSafetyViolation(renderErr) && attempt == 0 {
 						log.Printf("  safety violation, sanitizing prompt...")
-						if repairErr := sanitizeAIPrompt(srcPath, cfg.API.AnthropicKey); repairErr != nil {
+						if repairErr := sanitizeAIPrompt(srcPath, cfg.API.AnthropicKey, textModel, effort); repairErr != nil {
 							log.Printf("  sanitize failed: %v", repairErr)
 							break
 						}
@@ -174,7 +192,7 @@ func run(c *cli.Context) error {
 				}
 
 				log.Printf("  attempt %d failed: %v", attempt+1, renderErr)
-				if repairErr := repairSource(srcPath, meta.Method, renderOutput, cfg.API.AnthropicKey); repairErr != nil {
+				if repairErr := repairSource(srcPath, meta.Method, renderOutput, cfg.API.AnthropicKey, textModel, effort); repairErr != nil {
 					log.Printf("  repair failed: %v", repairErr)
 					break
 				}
@@ -257,9 +275,18 @@ func renderR(srcPath, outPath, commonR string) (string, error) {
 	return buf.String(), err
 }
 
-func renderAI(srcPath, outPath, apiKey string) error {
-	if apiKey == "" {
-		return fmt.Errorf("no OpenAI API key configured (api.openai_key)")
+// renderAI draws a figure with the image model --spend or --image-model picks.
+// Figures are landscape 3:2 — an aspect ratio for Gemini, a pixel size for
+// OpenAI — and are always stored as PNG, because the book finds each figure by
+// its .png name; a JPEG from Gemini is re-encoded.
+func renderAI(srcPath, outPath, model string, spec ai.ModelSpec) error {
+	keyName, err := ai.KeyNameForProvider(spec.Provider)
+	if err != nil {
+		return err
+	}
+	apiKey, err := creds.Get(keyName)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", keyName, err)
 	}
 
 	promptData, err := os.ReadFile(srcPath)
@@ -268,25 +295,29 @@ func renderAI(srcPath, outPath, apiKey string) error {
 	}
 	prompt := strings.TrimSpace(string(promptData))
 
-	provider := &ai.DallE{APIKey: apiKey}
-	imgData, err := provider.GenerateImage(context.Background(), prompt, ai.ImageOptions{
-		Model: "gpt-image-1",
-		Size:  "1536x1024",
-	})
+	opts := ai.ImageOptions{Model: model, Quality: spec.ImageQuality, Resolution: spec.ImageResolution}
+	var imgData []byte
+	switch spec.Provider {
+	case ai.ProviderGemini:
+		opts.Size = "3:2"
+		imgData, err = (&ai.Gemini{APIKey: apiKey}).GenerateImage(context.Background(), prompt, opts)
+	case ai.ProviderOpenAI:
+		opts.Size = "1536x1024"
+		imgData, err = (&ai.DallE{APIKey: apiKey}).GenerateImage(context.Background(), prompt, opts)
+	default:
+		return fmt.Errorf("imagerender draws with Gemini or OpenAI models, not %s (%s)", model, spec.Provider)
+	}
 	if err != nil {
 		return err
 	}
-
-	// Name the figure for the bytes actually returned rather than assuming the
-	// output extension. gpt-image returns PNG today, so this is a no-op now; it
-	// keeps the tool from ever mislabeling a future format.
-	if adjusted, changed := ai.PathWithTrueExt(outPath, imgData); changed {
-		outPath = adjusted
+	pngData, err := ai.EnsurePNG(imgData)
+	if err != nil {
+		return err
 	}
-	return os.WriteFile(outPath, imgData, appkit.FilePermissions)
+	return os.WriteFile(outPath, pngData, appkit.FilePermissions)
 }
 
-func repairSource(srcPath, method, errorOutput, apiKey string) error {
+func repairSource(srcPath, method, errorOutput, apiKey, model, effort string) error {
 	if apiKey == "" {
 		return fmt.Errorf("no Anthropic API key for repair")
 	}
@@ -328,8 +359,8 @@ RULES:
 - Fix the specific error, do not rewrite from scratch unless necessary.`,
 		lang, filepath.Base(srcPath), string(src), errorOutput, lang, method)
 
-	client := &ai.Anthropic{APIKey: apiKey, MaxRetries: 30}
-	result, err := client.Call(context.Background(), fixupModel, prompt, ai.CallOptions{Timeout: 60 * time.Second})
+	client := &ai.Anthropic{APIKey: apiKey, MaxRetries: 30, Pricing: ai.ProviderPricing(ai.ProviderAnthropic)}
+	result, err := client.Call(context.Background(), model, prompt, ai.CallOptions{Timeout: 60 * time.Second, Effort: effort})
 	if err != nil {
 		return fmt.Errorf("API call: %w", err)
 	}
@@ -352,7 +383,7 @@ func isSafetyViolation(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "content_policy_violation")
 }
 
-func sanitizeAIPrompt(srcPath, apiKey string) error {
+func sanitizeAIPrompt(srcPath, apiKey, model, effort string) error {
 	if apiKey == "" {
 		return fmt.Errorf("no Anthropic API key for sanitization")
 	}
@@ -377,8 +408,8 @@ RULES:
 - Keep the same visual intent and composition as the original.
 - Keep it concise — under 400 words.`, string(src))
 
-	client := &ai.Anthropic{APIKey: apiKey, MaxRetries: 30}
-	result, err := client.Call(context.Background(), fixupModel, prompt, ai.CallOptions{Timeout: 60 * time.Second})
+	client := &ai.Anthropic{APIKey: apiKey, MaxRetries: 30, Pricing: ai.ProviderPricing(ai.ProviderAnthropic)}
+	result, err := client.Call(context.Background(), model, prompt, ai.CallOptions{Timeout: 60 * time.Second, Effort: effort})
 	if err != nil {
 		return fmt.Errorf("API call: %w", err)
 	}

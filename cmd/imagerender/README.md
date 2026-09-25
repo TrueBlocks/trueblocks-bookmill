@@ -24,10 +24,10 @@ By method:
   `--data` directory when present.
 - **r** — run through `Rscript`; the script sources the shared `common.R`
   and saves through its `save_chart`.
-- **ai** — the prompt file goes to the OpenAI image API (`gpt-image-1`).
+- **ai** — the prompt file goes to the image model at `--spend` (cheap by default, Gemini Flash Image; `--image-model` names another). The figure is always stored as PNG; a JPEG reply is re-encoded.
 
 The mill fixes its own breakage: when a Mermaid or R source fails, the error
-output and source go to a model (`claude-sonnet-5`) for repair — the repaired
+output and source go to the writing model at `--spend` (`--text-model` names another) for repair — the repaired
 source is written back and retried, up to three times. An AI prompt rejected
 by the safety filter is rewritten once and retried. If everything fails, a
 grey placeholder PNG bearing the prompt text is produced so the book builds
@@ -51,6 +51,9 @@ Flags:
   --data         path to data directory containing common.R and mermaid-theme.json
   --slug         render images for a specific essay slug only
   --force        re-render even if PNG exists and is newer than source
+  --spend        cheap | pro — the model tier
+  --text-model   model that writes (see the ai registry)
+  --image-model  model that draws
   -v, --verbose  enable verbose (debug) logging
   -q, --quiet    suppress info logging (warnings/errors only)
   -h, --help     show this help and exit

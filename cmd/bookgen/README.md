@@ -25,7 +25,7 @@ what the book actually says, not from what it was meant to say.
   after the design; `--title` overrides the title otherwise pulled from the
   Plan's heading; `--author` sets the byline.
 
-Both take `--dry-run` (print the prompt, spend nothing) and `--model`.
+Both take `--dry-run` (print the prompt, spend nothing), `--spend cheap|pro` (the registry's compose model and effort at that tier; default cheap), and `--model` (names another model; overrides `--spend`).
 
 ## Options
 
@@ -43,8 +43,8 @@ Commands:
   cover  Generate front-cover prompt + image
 ```
 
-blurb: `--config`, `--model`, `--dry-run`, `--force`
-cover: `--config`, `--model`, `--dry-run`, `--prompt-only`, `--force`, `--title`, `--author`
+blurb: `--config`, `--spend`, `--model`, `--dry-run`, `--force`
+cover: `--config`, `--spend`, `--model`, `--image-model` (the drawer; default the image model at `--spend`; the cover is always saved as `front-cover.png`), `--dry-run`, `--prompt-only`, `--force`, `--title`, `--author`
 
 ## Example
 

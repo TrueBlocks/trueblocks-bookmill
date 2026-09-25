@@ -19,7 +19,7 @@ colorize reads `manifest.yaml` from the input directory — the ledger
 - `ai` — an image-edit model colorizes each engraving using the prompt in
   `prompts/colorize.md`; an image flagged `no_sky` in the manifest gets a
   prompt variant that keeps its top from becoming blue sky. The model comes
-  from the model registry's pro image slot (Gemini today); `--image-model`
+  from the model registry's image slot at `--spend` (pro by default, Gemini today); `--image-model`
   overrides it (e.g. `gpt-image-2`). Runs `--workers` images in parallel
   (4 by default). The API key for the model's provider comes from the shared
   credentials store via `packages/creds`. Each output file is named with the
@@ -54,7 +54,8 @@ Flags:
   --tool         colorization tool: ai, sepia, deoldify, python-script, or copy (default: copy)
   --script       path to custom Python colorization script (used with --tool=python-script)
   --prompt       override the default colorization prompt
-  --image-model  override the image model (default: the registry's pro image model)
+  --spend        cheap | pro — the model tier (default: pro)
+  --image-model  override the image model (default: the registry's image model at --spend)
   --workers      number of concurrent workers for API calls (default: 4)
   -v, --verbose  enable verbose (debug) logging
   -q, --quiet    suppress info logging (warnings/errors only)

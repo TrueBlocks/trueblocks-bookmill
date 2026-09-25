@@ -7,9 +7,11 @@ import (
 	"strings"
 
 	"github.com/TrueBlocks/trueblocks-art/packages/ai"
+	"github.com/TrueBlocks/trueblocks-art/packages/aiflags"
 	appkit "github.com/TrueBlocks/trueblocks-art/packages/appkit/v2"
 	"github.com/TrueBlocks/trueblocks-art/packages/bookgen"
 	"github.com/TrueBlocks/trueblocks-art/packages/cli"
+	"github.com/TrueBlocks/trueblocks-art/packages/creds"
 	"github.com/TrueBlocks/trueblocks-bookmill/internal/bookutil"
 	"github.com/TrueBlocks/trueblocks-bookmill/internal/pipeline"
 	"github.com/TrueBlocks/trueblocks-bookmill/internal/types"
@@ -30,7 +32,8 @@ func main() {
 				MinArgs:     1,
 				Flags: []cli.FlagDef{
 					{Name: "config", Help: "path to config.yaml", Default: pipeline.DefaultConfigPath()},
-					{Name: "model", Help: "Anthropic model", Default: "claude-sonnet-4-20250514"},
+					aiflags.SpendFlag(),
+					{Name: "model", Help: "model that writes (see the ai registry); overrides --spend", Default: ""},
 					{Name: "dry-run", Help: "print prompt without calling API", Default: false},
 					{Name: "force", Help: "regenerate even if blurb exists", Default: false},
 				},
@@ -43,7 +46,9 @@ func main() {
 				MinArgs:     1,
 				Flags: []cli.FlagDef{
 					{Name: "config", Help: "path to config.yaml", Default: pipeline.DefaultConfigPath()},
-					{Name: "model", Help: "Anthropic model", Default: "claude-sonnet-4-20250514"},
+					aiflags.SpendFlag(),
+					{Name: "model", Help: "model that writes (see the ai registry); overrides --spend", Default: ""},
+					aiflags.ImageModelFlag(""),
 					{Name: "dry-run", Help: "print prompt without calling API", Default: false},
 					{Name: "prompt-only", Help: "generate cover prompt, skip image", Default: false},
 					{Name: "force", Help: "regenerate even if artifacts exist", Default: false},
@@ -57,9 +62,25 @@ func main() {
 	cli.Exit(app.Main())
 }
 
+// resolveModel picks the writing model: --model when set, otherwise the
+// registry's compose model at --spend, with that tier's compose effort.
+func resolveModel(c *cli.Context) (string, string, error) {
+	model, spec, effort, err := ai.TierWriter(c.String("spend"), c.String("model"))
+	if err != nil {
+		return "", "", cli.NewUsageError(err)
+	}
+	if spec.Provider != ai.ProviderAnthropic {
+		return "", "", cli.NewUsageError(fmt.Errorf("bookgen calls Anthropic; %s is a %s model", model, spec.Provider))
+	}
+	return model, effort, nil
+}
+
 func runBlurb(c *cli.Context) error {
 	configPath := c.String("config")
-	model := c.String("model")
+	model, effort, err := resolveModel(c)
+	if err != nil {
+		return err
+	}
 	dryRun := c.Bool("dry-run")
 	force := c.Bool("force")
 	projectDir := c.Args[0]
@@ -90,6 +111,7 @@ func runBlurb(c *cli.Context) error {
 		Plan:   planText,
 		Essays: essays,
 		Model:  model,
+		Effort: effort,
 		DryRun: dryRun,
 	})
 	if err != nil {
@@ -119,7 +141,10 @@ func runBlurb(c *cli.Context) error {
 
 func runCover(c *cli.Context) error {
 	configPath := c.String("config")
-	model := c.String("model")
+	model, effort, err := resolveModel(c)
+	if err != nil {
+		return err
+	}
 	dryRun := c.Bool("dry-run")
 	promptOnly := c.Bool("prompt-only")
 	force := c.Bool("force")
@@ -158,22 +183,47 @@ func runCover(c *cli.Context) error {
 	blurbText := bookgen.ExtractBookBlurb(readBlurb(projectDir))
 	essays := convertEssays(rawEssays)
 
-	provider := &ai.Anthropic{APIKey: cfg.API.AnthropicKey}
+	provider := &ai.Anthropic{APIKey: cfg.API.AnthropicKey, Pricing: ai.ProviderPricing(ai.ProviderAnthropic)}
 
+	// The cover draws with the image model at --spend unless --image-model
+	// names another drawer.
+	imageModel, imageSpec, err := aiflags.ResolveTierImageModel(c)
+	if err != nil {
+		return err
+	}
 	var imgProvider ai.ImageProvider
 	if !promptOnly && !dryRun {
-		imgProvider = &ai.DallE{APIKey: cfg.API.OpenAIKey}
+		keyName, kErr := ai.KeyNameForProvider(imageSpec.Provider)
+		if kErr != nil {
+			return kErr
+		}
+		imageKey, kErr := creds.Get(keyName)
+		if kErr != nil {
+			return fmt.Errorf("reading %s: %w", keyName, kErr)
+		}
+		switch imageSpec.Provider {
+		case ai.ProviderGemini:
+			imgProvider = &ai.Gemini{APIKey: imageKey}
+		case ai.ProviderOpenAI:
+			imgProvider = &ai.DallE{APIKey: imageKey}
+		default:
+			return cli.NewUsageError(fmt.Errorf("bookgen draws with Gemini or OpenAI models, not %s (%s)", imageModel, imageSpec.Provider))
+		}
 	}
 
 	c.Logger.Info("generating front cover")
 	result, err := bookgen.GenerateCover(c.Context, provider, imgProvider, bookgen.CoverInput{
-		Title:  bookTitle,
-		Author: author,
-		Plan:   planText,
-		Blurb:  blurbText,
-		Essays: essays,
-		Model:  model,
-		DryRun: dryRun,
+		Title:           bookTitle,
+		Author:          author,
+		Plan:            planText,
+		Blurb:           blurbText,
+		Essays:          essays,
+		Model:           model,
+		Effort:          effort,
+		ImageModel:      imageModel,
+		ImageQuality:    imageSpec.ImageQuality,
+		ImageResolution: imageSpec.ImageResolution,
+		DryRun:          dryRun,
 	})
 	if err != nil && result == nil {
 		return err
@@ -195,15 +245,16 @@ func runCover(c *cli.Context) error {
 	}
 
 	if result.ImageData != nil {
-		coverPath := imagePath
-		if adjusted, changed := ai.PathWithTrueExt(coverPath, result.ImageData); changed {
-			c.Logger.Info("named the cover for its true format", "requested", coverPath, "written", adjusted)
-			coverPath = adjusted
+		// The pipeline finds the cover as front-cover.png, so a JPEG from
+		// Gemini is re-encoded rather than renamed.
+		pngData, pErr := ai.EnsurePNG(result.ImageData)
+		if pErr != nil {
+			return pErr
 		}
-		if wErr := os.WriteFile(coverPath, result.ImageData, appkit.FilePermissions); wErr != nil {
+		if wErr := os.WriteFile(imagePath, pngData, appkit.FilePermissions); wErr != nil {
 			return fmt.Errorf("writing image: %w", wErr)
 		}
-		c.Logger.Info("wrote cover image", "path", coverPath)
+		c.Logger.Info("wrote cover image", "path", imagePath)
 	}
 
 	if err != nil {
@@ -223,7 +274,7 @@ func loadProvider(configPath string, dryRun bool) (ai.Provider, error) {
 	if cfg.API.AnthropicKey == "" {
 		return nil, fmt.Errorf("no anthropic_key in config")
 	}
-	return &ai.Anthropic{APIKey: cfg.API.AnthropicKey}, nil
+	return &ai.Anthropic{APIKey: cfg.API.AnthropicKey, Pricing: ai.ProviderPricing(ai.ProviderAnthropic)}, nil
 }
 
 func convertEssays(raw []types.EssayContent) []bookgen.Essay {

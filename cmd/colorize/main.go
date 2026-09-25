@@ -67,6 +67,7 @@ func main() {
 			{Name: "tool", Help: "colorization tool: ai, sepia, deoldify, python-script, or copy (default: copy)", Default: "copy"},
 			{Name: "script", Help: "path to custom Python colorization script (used with --tool=python-script)", Default: ""},
 			{Name: "prompt", Help: "override the default colorization prompt", Default: ""},
+			aiflags.SpendFlagDefault(ai.TierPro),
 			aiflags.ImageModelFlag(""),
 			{Name: "workers", Help: "number of concurrent workers for API calls (default: 4)", Default: 4},
 		},
@@ -137,14 +138,15 @@ func run(c *cli.Context) error {
 		workers = 1
 	}
 
-	// The AI tool reads its model from the registry's pro image slot — Gemini
-	// today — so adopting a better or cheaper drawer is a models.json edit, not
-	// a rebuild. --image-model overrides it (e.g. gpt-image-2 for the old path).
+	// The AI tool reads its model from the registry's image slot at --spend —
+	// pro by default, Gemini today — so adopting a better or cheaper drawer is a
+	// models.json edit, not a rebuild. --image-model overrides it (e.g.
+	// gpt-image-2 for the old path).
 	var aiModel string
 	if tool == "ai" {
-		builtin, err := ai.RoleModel(ai.TierPro, ai.RoleImage)
+		builtin, err := ai.RoleModel(c.String("spend"), ai.RoleImage)
 		if err != nil {
-			return err
+			return cli.NewUsageError(err)
 		}
 		model, _, err := aiflags.ResolveImageModel(c, builtin)
 		if err != nil {
