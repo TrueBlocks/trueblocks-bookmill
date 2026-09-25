@@ -24,10 +24,10 @@ By method:
   `--data` directory when present.
 - **r** — run through `Rscript`; the script sources the shared `common.R`
   and saves through its `save_chart`.
-- **ai** — the prompt file goes to the image model at `--spend` (cheap by default, Gemini Flash Image; `--image-model` names another). The figure is always stored as PNG; a JPEG reply is re-encoded.
+- **ai** — the prompt file goes to the image model at `--spend` (cheap by default, Gemini Flash Image; `--image-model` names another Gemini or OpenAI model). The figure is always stored as PNG; a JPEG reply is re-encoded.
 
 The mill fixes its own breakage: when a Mermaid or R source fails, the error
-output and source go to the writing model at `--spend` (`--text-model` names another) for repair — the repaired
+output and source go to the writing model at `--spend` (`--text-model` names another, which must be an Anthropic model) for repair — the repaired
 source is written back and retried, up to three times. An AI prompt rejected
 by the safety filter is rewritten once and retried. If everything fails, a
 grey placeholder PNG bearing the prompt text is produced so the book builds

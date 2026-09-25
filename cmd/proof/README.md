@@ -15,7 +15,8 @@ proof takes the markdown that `extract-text` produced and the original PDF,
 and checks every page's words against the page itself. For each
 `<!-- page N -->` block it renders that page of the PDF to an image with
 `pdftoppm`, then sends text and image together to a vision model (the
-registry's compose model at the `--spend` tier, cheap by default, or `--text-model` to choose another)
+registry's compose model at the `--spend` tier, cheap by default, or `--text-model` to choose another;
+it must be an Anthropic or OpenAI model)
 with strict orders:
 
 - **Fix only scanning damage** — garbled characters, wrong letters, broken
